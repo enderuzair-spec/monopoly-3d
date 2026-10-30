@@ -3,6 +3,17 @@
 const socket = io();
 window.socket = socket;
 
+// Persistent Session Token for Graceful Disconnect/Rejoin
+let sessionToken = localStorage.getItem("monopoly_session_token");
+if (!sessionToken) {
+  sessionToken = "sess_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now();
+  try {
+    localStorage.setItem("monopoly_session_token", sessionToken);
+  } catch (e) {
+    console.warn("localStorage unavailable for session token");
+  }
+}
+
 let scene3D = null;
 let myPlayer = null;
 let currentRoomId = null;
@@ -36,6 +47,12 @@ const lobbyPlayersList = document.getElementById("lobbyPlayersList");
 const playerCount = document.getElementById("playerCount");
 const addBotBtn = document.getElementById("addBotBtn");
 const startGameBtn = document.getElementById("startGameBtn");
+const hostLobbyControls = document.getElementById("hostLobbyControls");
+const nonHostLobbyNotice = document.getElementById("nonHostLobbyNotice");
+const spectatorBanner = document.getElementById("spectatorBanner");
+const hudRightSidebar = document.getElementById("hudRightSidebar");
+const closeSidebarBtn = document.getElementById("closeSidebarBtn");
+const openSidebarBtn = document.getElementById("openSidebarBtn");
 
 const gameRoomCode = document.getElementById("gameRoomCode");
 const headerShareBtn = document.getElementById("headerShareBtn");
@@ -84,7 +101,11 @@ const auctionCurrentBid = document.getElementById("auctionCurrentBid");
 const auctionLeader = document.getElementById("auctionLeader");
 const bid10Btn = document.getElementById("bid10Btn");
 const bid50Btn = document.getElementById("bid50Btn");
+const bid100Btn = document.getElementById("bid100Btn");
 const passAuctionBtn = document.getElementById("passAuctionBtn");
+const auctionTimeLeft = document.getElementById("auctionTimeLeft");
+const auctionTimerBadge = document.getElementById("auctionTimerBadge");
+const auctionStatusBanner = document.getElementById("auctionStatusBanner");
 
 const debtOverlay = document.getElementById("debtOverlay");
 const debtInfoText = document.getElementById("debtInfoText");
@@ -199,7 +220,7 @@ function updateLobbyModeUI(mode) {
 // Create Room
 createRoomBtn.addEventListener("click", () => {
   const name = playerNameInput.value.trim() || "Host";
-  socket.emit("create_room", { name, token: selectedToken, gameType: selectedGameMode }, (res) => {
+  socket.emit("create_room", { name, token: selectedToken, gameType: selectedGameMode, sessionToken }, (res) => {
     if (res.success) {
       currentRoomId = res.roomId;
       myPlayer = res.player;
@@ -214,16 +235,40 @@ joinRoomBtn.addEventListener("click", () => {
   const name = playerNameInput.value.trim() || "Player";
   const code = joinRoomCodeInput.value.trim().toUpperCase();
   if (!code) return alert("Please enter a room code!");
+  currentRoomId = code;
 
-  socket.emit("join_room", { roomId: code, name, token: selectedToken }, (res) => {
+  socket.emit("join_room", { roomId: code, name, token: selectedToken, sessionToken }, (res) => {
     if (res.error) {
+      currentRoomId = null;
       alert(res.error);
     } else {
       currentRoomId = res.roomId;
-      myPlayer = res.player;
+      if (res.isSpectator) {
+        myPlayer = { id: socket.id, name: name + " (Spectator)", isSpectator: true };
+        spectatorBanner?.classList.remove("hidden");
+      } else {
+        myPlayer = res.player;
+      }
       switchToLobbyWaiting(res.roomId);
     }
   });
+});
+
+// Auto-Reconnection & Grace Handling
+socket.on("connect", () => {
+  if (currentRoomId && sessionToken) {
+    socket.emit("join_room", { roomId: currentRoomId, sessionToken }, (res) => {
+      if (res && res.player) {
+        myPlayer = res.player;
+      }
+    });
+  }
+});
+
+// Kicked by Host Notification
+socket.on("kicked_from_room", (data) => {
+  alert(data?.reason || "You have been removed from the lobby by the room host.");
+  window.location.reload();
 });
 
 // Add AI Bot
@@ -255,6 +300,7 @@ function switchToLobbyWaiting(roomId) {
   lobbyInitialView.classList.add("hidden");
   lobbyWaitingView.classList.remove("hidden");
   displayRoomCode.textContent = roomId;
+  if (gameState) renderLobbyWaiting(gameState);
 }
 
 // Game State Updates
@@ -335,6 +381,9 @@ socket.on("game_state", (state) => {
   if (myPlayer && state.players) {
     const updated = state.players.find(p => p.id === myPlayer.id);
     if (updated) myPlayer = updated;
+  } else if (!myPlayer && state.players) {
+    const found = state.players.find(p => p.id === socket.id || (sessionToken && p.sessionToken === sessionToken));
+    if (found) myPlayer = found;
   }
   if (propertiesModal && !propertiesModal.classList.contains("hidden")) {
     renderPropertyPortfolio();
@@ -390,7 +439,20 @@ function renderLobbyWaiting(state) {
   playerCount.textContent = state.players.length;
   lobbyPlayersList.innerHTML = "";
 
+  const isHost = (myPlayer?.id === state.hostId) || (myPlayer?.isHost) || (state.players.length > 0 && state.players[0].id === myPlayer?.id);
+
+  if (hostLobbyControls && nonHostLobbyNotice) {
+    if (isHost) {
+      hostLobbyControls.classList.remove("hidden");
+      nonHostLobbyNotice.classList.add("hidden");
+    } else {
+      hostLobbyControls.classList.add("hidden");
+      nonHostLobbyNotice.classList.remove("hidden");
+    }
+  }
+
   state.players.forEach(p => {
+    const isThisPlayerHost = (p.id === state.hostId) || p.isHost;
     const row = document.createElement("div");
     row.className = "lobby-player-row";
     row.style.borderLeftColor = p.color;
@@ -398,11 +460,26 @@ function renderLobbyWaiting(state) {
       <div style="display:flex;align-items:center;gap:12px;">
         <span style="font-size:24px;">${p.token}</span>
         <strong>${p.name}</strong>
+        ${isThisPlayerHost ? '<span class="host-badge">👑 HOST</span>' : ''}
         ${p.isBot ? '<span style="font-size:11px;background:#334155;padding:2px 8px;border-radius:6px;">AI BOT</span>' : ''}
       </div>
-      <span style="color:#10b981;font-weight:700;font-size:13px;">READY</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="color:#10b981;font-weight:700;font-size:13px;">READY</span>
+        ${isHost && p.id !== myPlayer?.id ? `<button class="kick-player-btn" data-player-id="${p.id}" title="Kick player from lobby">✕ Kick</button>` : ''}
+      </div>
     `;
     lobbyPlayersList.appendChild(row);
+  });
+
+  // Attach kick button listeners
+  lobbyPlayersList.querySelectorAll(".kick-player-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const targetId = btn.getAttribute("data-player-id");
+      if (targetId && currentRoomId) {
+        socket.emit("kick_player", { roomId: currentRoomId, targetPlayerId: targetId });
+      }
+    });
   });
 
   if (state.players.length >= 2) {
@@ -509,18 +586,62 @@ function render3DGame(state) {
     const leader = state.players.find(p => p.id === state.auctionState.highestBidderId);
     auctionLeader.textContent = leader ? `High bidder: ${leader.name}` : "No bids yet";
 
+    if (auctionTimeLeft) {
+      auctionTimeLeft.textContent = state.auctionState.timeLeft ?? 15;
+    }
+
+    const isHighestBidder = (myPlayer?.id === state.auctionState.highestBidderId);
     const hasPassed = state.auctionState.passedPlayerIds.includes(myPlayer?.id);
-    if (hasPassed || myPlayer?.bankrupt) {
+    const canAfford10 = myPlayer ? (myPlayer.money >= state.auctionState.currentBid + 10) : false;
+    const canAfford50 = myPlayer ? (myPlayer.money >= state.auctionState.currentBid + 50) : false;
+    const canAfford100 = myPlayer ? (myPlayer.money >= state.auctionState.currentBid + 100) : false;
+
+    if (auctionStatusBanner) {
+      if (myPlayer?.isSpectator) {
+        auctionStatusBanner.textContent = "👁️ Spectating live public auction...";
+        auctionStatusBanner.className = "auction-status-banner";
+      } else if (isHighestBidder) {
+        auctionStatusBanner.textContent = "⭐ You are the highest bidder! Waiting for timer or passes...";
+        auctionStatusBanner.className = "auction-status-banner winning";
+      } else if (hasPassed) {
+        auctionStatusBanner.textContent = "❌ You passed on this auction. Spectating...";
+        auctionStatusBanner.className = "auction-status-banner passed";
+      } else {
+        auctionStatusBanner.textContent = "⏱️ Place your bid or pass before time expires!";
+        auctionStatusBanner.className = "auction-status-banner active";
+      }
+    }
+
+    if (hasPassed || myPlayer?.bankrupt || isHighestBidder || myPlayer?.isSpectator) {
       bid10Btn.setAttribute("disabled", "true");
       bid50Btn.setAttribute("disabled", "true");
+      if (bid100Btn) bid100Btn.setAttribute("disabled", "true");
       passAuctionBtn.setAttribute("disabled", "true");
     } else {
-      bid10Btn.removeAttribute("disabled");
-      bid50Btn.removeAttribute("disabled");
+      if (canAfford10) bid10Btn.removeAttribute("disabled"); else bid10Btn.setAttribute("disabled", "true");
+      if (canAfford50) bid50Btn.removeAttribute("disabled"); else bid50Btn.setAttribute("disabled", "true");
+      if (bid100Btn) {
+        if (canAfford100) bid100Btn.removeAttribute("disabled"); else bid100Btn.setAttribute("disabled", "true");
+      }
       passAuctionBtn.removeAttribute("disabled");
     }
   } else {
     auctionOverlay.classList.add("hidden");
+  }
+
+  // Spectator View Mode Restrictions
+  if (myPlayer?.isSpectator) {
+    spectatorBanner?.classList.remove("hidden");
+    turnIndicator.textContent = `👁️ Spectating — ⏳ ${currentP?.name}'s Turn`;
+    gamePrompt.textContent = `Match in progress. Spectating active table (${state.players.length} players).`;
+    hideAllActionButtons();
+    document.getElementById("centerControls")?.classList.add("hidden");
+    tutorialCoachBox?.classList.add("hidden");
+    openTradeBtn?.classList.add("hidden");
+    openCashDrawerBtn?.classList.add("hidden");
+    saveGameBtn?.classList.add("hidden");
+  } else {
+    document.getElementById("centerControls")?.classList.remove("hidden");
   }
 
   // Debt Overlay
@@ -643,18 +764,36 @@ cardModalBackdrop?.addEventListener("click", (e) => {
 bid10Btn.addEventListener("click", () => {
   if (gameState?.auctionState) {
     socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 10 });
-    window.sounds.playCash();
+    window.sounds?.playCash();
   }
 });
 
 bid50Btn.addEventListener("click", () => {
   if (gameState?.auctionState) {
     socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 50 });
-    window.sounds.playCash();
+    window.sounds?.playCash();
+  }
+});
+
+bid100Btn?.addEventListener("click", () => {
+  if (gameState?.auctionState) {
+    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 100 });
+    window.sounds?.playCash();
   }
 });
 
 passAuctionBtn.addEventListener("click", () => socket.emit("pass_bid", { roomId: currentRoomId }));
+
+// Collapsible Sidebar Controls
+closeSidebarBtn?.addEventListener("click", () => {
+  hudRightSidebar?.classList.add("collapsed");
+  openSidebarBtn?.classList.remove("hidden");
+});
+
+openSidebarBtn?.addEventListener("click", () => {
+  hudRightSidebar?.classList.remove("collapsed");
+  openSidebarBtn?.classList.add("hidden");
+});
 
 // Debt
 settleDebtBtn.addEventListener("click", () => socket.emit("pay_debt", { roomId: currentRoomId }));

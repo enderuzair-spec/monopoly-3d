@@ -79,11 +79,15 @@
           <div id="lobbyPlayersList" class="lobby-players-grid"></div>
         </div>
 
-        <div class="lobby-controls">
+        <div class="lobby-controls hidden" id="hostLobbyControls">
           <button id="addBotBtn" class="btn btn-outline">🤖 Add AI Bot</button>
           <button id="startGameBtn" class="btn btn-success btn-lg">🚀 Launch Game</button>
         </div>
-        <p class="hint-text">Add 1-3 AI Bots to play solo or invite friends via link!</p>
+        <div id="nonHostLobbyNotice" class="non-host-notice hidden">
+          <span class="pulsing-icon">⏳</span>
+          <span id="nonHostNoticeText">Waiting for Room Host to configure match and launch...</span>
+        </div>
+        <p class="hint-text" id="lobbyHintText">Add 1-3 AI Bots to play solo or invite friends via link!</p>
       </div>
     </div>
   </div>
@@ -126,6 +130,12 @@
       <button id="afkTakeControlBtn" class="afk-take-control-btn">Take Control</button>
     </div>
 
+    <!-- Floating Spectator Mode Status Banner -->
+    <div id="spectatorBanner" class="spectator-banner hidden">
+      <span class="spectator-icon">👁️</span>
+      <span><strong>Spectator Mode</strong> — Watching live match in progress</span>
+    </div>
+
 
     <!-- Floating HUD Bottom Center: Video Game Action Controls -->
     <div class="hud-bottom-center">
@@ -157,12 +167,15 @@
     </div>
 
     <!-- Unified Right Sidebar: Players HUD + Activity Log & Chat -->
-    <aside class="hud-right-sidebar glass-panel">
+    <aside class="hud-right-sidebar glass-panel" id="hudRightSidebar">
       <!-- Members / Players Section -->
       <div class="sidebar-players-section">
         <div class="sidebar-section-title">
           <span>MEMBERS AT TABLE</span>
-          <span class="badge" id="hudPlayerCount">0</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="badge" id="hudPlayerCount">0</span>
+            <button id="closeSidebarBtn" class="sidebar-close-toggle" title="Hide Sidebar">✕</button>
+          </div>
         </div>
         <div id="playersHudList" class="players-hud-list"></div>
       </div>
@@ -219,14 +232,22 @@
         </div>
     </aside>
 
+    <!-- Floating Re-Open Sidebar Tab (Visible when sidebar is closed) -->
+    <button id="openSidebarBtn" class="floating-sidebar-toggle hidden" title="Open Sidebar">📋 Table Info & Chat ◀</button>
+
     <!-- Live Auction 3D Overlay -->
     <div id="auctionOverlay" class="auction-box glass-panel hidden">
-      <div class="auction-title">🔨 LIVE PROPERTY AUCTION</div>
+      <div class="auction-header-row">
+        <div class="auction-title">🔨 LIVE PROPERTY AUCTION</div>
+        <div class="auction-timer-badge" id="auctionTimerBadge">⏱️ <span id="auctionTimeLeft">15</span>s</div>
+      </div>
       <div class="auction-property" id="auctionPropName">Atlantic Avenue</div>
       <div class="auction-bid">Current Bid: <strong id="auctionCurrentBid">$10</strong> (<span id="auctionLeader">No bids</span>)</div>
+      <div class="auction-status-banner" id="auctionStatusBanner">Place a bid before the 15s clock expires!</div>
       <div class="auction-actions">
         <button id="bid10Btn" class="btn btn-success">+$10 Bid</button>
         <button id="bid50Btn" class="btn btn-success">+$50 Bid</button>
+        <button id="bid100Btn" class="btn btn-success">+$100 Bid</button>
         <button id="passAuctionBtn" class="btn btn-danger">Pass</button>
       </div>
     </div>

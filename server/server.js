@@ -62,7 +62,7 @@ io.on("connection", (socket) => {
   let currentPlayerId = null;
 
   // Create new game room (Monopoly 3D active; Uno locked behind Coming Soon)
-  socket.on("create_room", ({ name, token, color }, callback) => {
+  socket.on("create_room", ({ name, token, color, sessionToken }, callback) => {
     const roomId = generateRoomId();
     currentRoomId = roomId;
     currentPlayerId = socket.id;
@@ -74,6 +74,7 @@ io.on("connection", (socket) => {
     rooms.set(roomId, engine);
     const res = engine.addPlayer({
       id: socket.id,
+      sessionToken: sessionToken || socket.id,
       name: name || "Host",
       token,
       color,
@@ -130,7 +131,7 @@ io.on("connection", (socket) => {
   });
 
   // Join existing room
-  socket.on("join_room", ({ roomId, name, token, color }, callback) => {
+  socket.on("join_room", ({ roomId, name, token, color, sessionToken }, callback) => {
     const cleanRoomId = (roomId || "").trim().toUpperCase();
     const engine = rooms.get(cleanRoomId);
 
@@ -139,27 +140,39 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (engine.status !== "waiting") {
-      // Check if reconnecting existing player
-      const existing = engine.players.find(p => p.name.toLowerCase() === (name || "").trim().toLowerCase());
-      if (existing) {
-        existing.id = socket.id;
-        existing.connected = true;
-        currentRoomId = cleanRoomId;
-        currentPlayerId = socket.id;
-        socket.join(cleanRoomId);
-        engine.log(`${existing.name} reconnected.`);
-        if (callback) callback({ success: true, roomId: cleanRoomId, player: existing });
+    currentRoomId = cleanRoomId;
+    currentPlayerId = socket.id;
+    socket.join(cleanRoomId);
+
+    // 1. Check if reconnecting existing player (by sessionToken or name)
+    if (engine.reconnectPlayer) {
+      const reconnected = engine.reconnectPlayer(socket.id, sessionToken, name);
+      if (reconnected) {
+        if (callback) callback({ success: true, roomId: cleanRoomId, player: reconnected, reconnected: true });
         io.to(cleanRoomId).emit("game_state", engine.getPublicState());
         return;
       }
+    }
 
-      if (callback) callback({ error: "Game already in progress!" });
+    // 2. If match already in progress and NOT a reconnecting player -> Join as Spectator!
+    if (engine.status !== "waiting") {
+      if (engine.addSpectator) {
+        engine.addSpectator(socket.id, name);
+      }
+      if (callback) callback({
+        success: true,
+        roomId: cleanRoomId,
+        isSpectator: true,
+        player: { id: socket.id, name: name || "Spectator", isSpectator: true }
+      });
+      io.to(cleanRoomId).emit("game_state", engine.getPublicState());
       return;
     }
 
+    // 3. Normal lobby join
     const res = engine.addPlayer({
       id: socket.id,
+      sessionToken: sessionToken || socket.id,
       name,
       token,
       color,
@@ -171,12 +184,19 @@ io.on("connection", (socket) => {
       return;
     }
 
-    currentRoomId = cleanRoomId;
-    currentPlayerId = socket.id;
-    socket.join(cleanRoomId);
-
     if (callback) callback({ success: true, roomId: cleanRoomId, player: res.player });
     io.to(cleanRoomId).emit("game_state", engine.getPublicState());
+  });
+
+  // Host: Kick player or bot from room
+  socket.on("kick_player", ({ roomId, targetPlayerId }, callback) => {
+    const engine = rooms.get(roomId);
+    if (!engine || !engine.kickPlayer) return;
+    const res = engine.kickPlayer(socket.id, targetPlayerId);
+    if (res.success && res.target) {
+      io.to(targetPlayerId).emit("kicked_from_room", { message: "You were removed from the lobby by the host." });
+    }
+    if (callback) callback(res);
   });
 
   // Leave active game room (Return to Main Menu)
@@ -465,14 +485,15 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Disconnect
+  // Disconnect & Spectator Cleanup
   socket.on("disconnect", () => {
     if (currentRoomId) {
       const engine = rooms.get(currentRoomId);
       if (engine) {
+        if (engine.removeSpectator) engine.removeSpectator(socket.id);
         engine.removePlayer(socket.id);
-        // Clean up empty rooms
-        if (engine.players.length === 0 || engine.players.every(p => !p.connected && !p.isBot)) {
+        // Clean up empty rooms only if abandoned in lobby or all human players left for good
+        if (engine.status === "waiting" && (engine.players.length === 0 || engine.players.every(p => !p.connected && !p.isBot))) {
           rooms.delete(currentRoomId);
         }
       }

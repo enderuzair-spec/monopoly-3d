@@ -1923,3 +1923,164 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus {
   filter: grayscale(40%);
   cursor: not-allowed;
 }
+
+/* ================= COLLAPSIBLE SIDEBAR ================= */
+.hud-right-sidebar {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease;
+}
+
+.hud-right-sidebar.collapsed {
+  transform: translateX(calc(100% + 40px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-close-toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #94a3b8;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sidebar-close-toggle:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+  border-color: #ef4444;
+}
+
+.floating-sidebar-toggle {
+  position: absolute;
+  top: 96px;
+  right: 18px;
+  z-index: 15;
+  background: rgba(20, 15, 10, 0.90);
+  border: 1px solid #d4af37;
+  color: #fde047;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+  transition: all 0.2s;
+}
+.floating-sidebar-toggle:hover {
+  background: #d4af37;
+  color: #1e1b18;
+  transform: scale(1.05);
+}
+
+/* ================= AUCTION TIMER & MULTI-INCREMENTS ================= */
+.auction-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.auction-timer-badge {
+  background: #991b1b;
+  color: #fef08a;
+  border: 1px solid #dc2626;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  animation: pulseTimer 1s infinite alternate;
+}
+
+@keyframes pulseTimer {
+  0% { transform: scale(1); filter: brightness(1); }
+  100% { transform: scale(1.06); filter: brightness(1.25); }
+}
+
+.auction-status-banner {
+  font-size: 12px;
+  color: #fbbf24;
+  margin: 6px 0 10px 0;
+  font-style: italic;
+  font-weight: 600;
+}
+
+/* ================= SPECTATOR MODE ================= */
+.spectator-banner {
+  position: absolute;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid #38bdf8;
+  color: #bae6fd;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(8px);
+}
+
+/* ================= HOST PRIVILEGES & KICK CONTROLS ================= */
+.host-crown-badge {
+  background: #854d0e;
+  color: #fde047;
+  border: 1px solid #eab308;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  margin-left: 6px;
+  letter-spacing: 0.5px;
+}
+
+.lobby-kick-btn {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #ef4444;
+  color: #f87171;
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+}
+.lobby-kick-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+.non-host-notice {
+  background: rgba(30, 41, 59, 0.85);
+  border: 1px dashed #64748b;
+  color: #cbd5e1;
+  padding: 12px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 14px 0 6px;
+}
+
+.disconnected-grace-badge {
+  background: #78350f;
+  color: #fde047;
+  border: 1px solid #d97706;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 6px;
+}

@@ -37,6 +37,13 @@ class MonopolyEngine {
     this.activeCard = null; // latest card drawn for UI display
     this.lastMove = null; // for 3D hop animation
     this.rollId = 0; // unique roll counter to guarantee 3D dice trigger
+
+    // Host, Spectators & Reconnection Session Management
+    this.hostId = null;
+    this.spectators = new Map();
+    this.graceTimers = new Map();
+    this.auctionTimer = null;
+    this.botAuctionTimeout = null;
   }
 
 
@@ -174,7 +181,7 @@ class MonopolyEngine {
     return { success: true, bills: player.bills, money: player.money };
   }
 
-  addPlayer({ id, name, token, color, isBot = false }) {
+  addPlayer({ id, sessionToken, name, token, color, isBot = false }) {
     if (this.status !== "waiting") return { error: "Game already in progress" };
     if (this.players.length >= 6) return { error: "Room is full (max 6 players)" };
 
@@ -194,8 +201,10 @@ class MonopolyEngine {
       chosenColor = ALL_COLORS.find(c => !takenColors.has(c)) || ALL_COLORS[0];
     }
 
+    const isFirstHuman = !isBot && !this.players.some(p => !p.isBot);
     const player = {
       id,
+      sessionToken: sessionToken || id,
       name: (name || "").trim() || `Player ${this.players.length + 1}`,
       token: chosenToken,
       color: chosenColor,
@@ -207,8 +216,13 @@ class MonopolyEngine {
       jailCards: 0,
       bankrupt: false,
       isBot,
-      connected: true
+      connected: true,
+      disconnectExpires: null
     };
+
+    if (isFirstHuman && !this.hostId) {
+      this.hostId = player.id;
+    }
 
     this.players.push(player);
     this.log(`${player.name} joined the game.`);
@@ -224,12 +238,105 @@ class MonopolyEngine {
     if (this.status === "waiting") {
       this.players.splice(idx, 1);
       this.log(`${p.name} left the lobby.`);
+      if (this.hostId === playerId) {
+        const nextHost = this.players.find(pl => !pl.isBot);
+        this.hostId = nextHost ? nextHost.id : null;
+      }
+      this.emitChange();
     } else {
+      // 60-second grace period for in-game disconnects
       p.connected = false;
-      this.log(`${p.name} disconnected.`);
-      // If disconnected during their turn, could convert to bot or let game continue
+      p.disconnectExpires = Date.now() + 60000;
+      this.log(`⚠️ ${p.name} disconnected. Holding seat for 60 seconds...`);
+      this.emitChange();
+
+      if (this.graceTimers && this.graceTimers.has(p.id)) {
+        clearTimeout(this.graceTimers.get(p.id));
+      }
+      if (!this.graceTimers) this.graceTimers = new Map();
+
+      const timer = setTimeout(() => {
+        this.graceTimers.delete(p.id);
+        if (!p.connected && !p.bankrupt) {
+          p.isBot = true;
+          if (!p.name.includes("(AI)")) p.name += " (AI)";
+          p.disconnectExpires = null;
+          this.log(`⏱️ ${p.name} did not reconnect within 60s. An AI Bot has taken over their seat.`);
+          this.emitChange();
+
+          if (this.status === "in_progress") {
+            if (this.getCurrentPlayer()?.id === p.id) {
+              this.checkBotTurn();
+            }
+            if (this.turnPhase === "auction" && this.auctionState) {
+              this.checkBotAuction();
+            }
+          }
+        }
+      }, 60000);
+
+      this.graceTimers.set(p.id, timer);
     }
+  }
+
+  reconnectPlayer(newSocketId, sessionToken, name) {
+    const player = this.players.find(p => 
+      (sessionToken && p.sessionToken === sessionToken) ||
+      (name && p.name.replace(" (AI)", "").trim().toLowerCase() === name.trim().toLowerCase())
+    );
+    if (!player) return null;
+
+    if (this.graceTimers && this.graceTimers.has(player.id)) {
+      clearTimeout(this.graceTimers.get(player.id));
+      this.graceTimers.delete(player.id);
+    }
+
+    if (this.hostId === player.id) {
+      this.hostId = newSocketId;
+    }
+
+    player.id = newSocketId;
+    player.connected = true;
+    player.disconnectExpires = null;
+    if (player.name.includes("(AI)")) {
+      player.name = player.name.replace(" (AI)", "");
+      player.isBot = false;
+    }
+
+    this.log(`🎉 ${player.name} reconnected successfully!`);
     this.emitChange();
+    return player;
+  }
+
+  kickPlayer(requestSocketId, targetPlayerId) {
+    if (requestSocketId !== this.hostId) {
+      return { error: "Only the room host can kick players or bots." };
+    }
+    if (requestSocketId === targetPlayerId) {
+      return { error: "Host cannot kick themselves." };
+    }
+    const idx = this.players.findIndex(p => p.id === targetPlayerId);
+    if (idx === -1) return { error: "Player not found." };
+
+    const target = this.players[idx];
+    this.players.splice(idx, 1);
+    this.log(`👢 ${target.name} was removed from the lobby by the host.`);
+    this.emitChange();
+    return { success: true, target };
+  }
+
+  addSpectator(socketId, name) {
+    if (!this.spectators) this.spectators = new Map();
+    this.spectators.set(socketId, { id: socketId, name: name || "Spectator", isSpectator: true });
+    this.log(`👁️ ${name || "A spectator"} joined to watch the match.`);
+    this.emitChange();
+  }
+
+  removeSpectator(socketId) {
+    if (this.spectators && this.spectators.has(socketId)) {
+      this.spectators.delete(socketId);
+      this.emitChange();
+    }
   }
 
   startGame() {
@@ -509,25 +616,58 @@ class MonopolyEngine {
     return { success: true };
   }
 
-  // Auction System
+  // Auction System - Resilient with 15s Countdown Timer & Multi-Increment Bidding
   startAuction(propertyId) {
     const tile = BOARD[propertyId];
     if (!tile) return { error: "Invalid tile" };
     const prop = this.properties[propertyId];
     if (prop.owner) return { error: "Property already owned" };
 
-    const activePlayers = this.players.filter(p => !p.bankrupt);
+    if (this.auctionTimer) {
+      clearInterval(this.auctionTimer);
+      this.auctionTimer = null;
+    }
+    if (this.botAuctionTimeout) {
+      clearTimeout(this.botAuctionTimeout);
+      this.botAuctionTimeout = null;
+    }
+
     this.auctionState = {
       propertyId,
       tileName: tile.name,
       currentBid: 10,
       highestBidderId: null,
-      passedPlayerIds: []
+      passedPlayerIds: [],
+      timeLeft: 15
     };
 
     this.turnPhase = "auction";
-    this.log(`Auction started for ${tile.name}! Starting bid is $10.`);
+    this.log(`🔨 Auction started for ${tile.name}! Opening bid: $10 (15s timer).`);
     this.emitChange();
+
+    // 1-second countdown interval
+    this.auctionTimer = setInterval(() => {
+      if (!this.auctionState) {
+        if (this.auctionTimer) {
+          clearInterval(this.auctionTimer);
+          this.auctionTimer = null;
+        }
+        return;
+      }
+
+      this.auctionState.timeLeft--;
+      if (this.auctionState.timeLeft <= 0) {
+        if (this.auctionTimer) {
+          clearInterval(this.auctionTimer);
+          this.auctionTimer = null;
+        }
+        this.log(`⏱️ Auction timer expired for ${this.auctionState.tileName}!`);
+        this.concludeAuction();
+      } else {
+        this.emitChange();
+      }
+    }, 1000);
+
     this.checkBotAuction();
     return { success: true };
   }
@@ -536,12 +676,23 @@ class MonopolyEngine {
     if (!this.auctionState) return { error: "No active auction" };
     const player = this.players.find(p => p.id === playerId);
     if (!player || player.bankrupt) return { error: "Invalid player" };
-    if (bidAmount <= this.auctionState.currentBid) return { error: "Bid must be higher than current bid" };
-    if (player.money < bidAmount) return { error: "Not enough money" };
+    if (this.auctionState.highestBidderId === playerId) {
+      return { error: "You are already the highest bidder" };
+    }
+    if (this.auctionState.passedPlayerIds.includes(playerId)) {
+      return { error: "You already passed on this auction" };
+    }
+    if (bidAmount <= this.auctionState.currentBid) {
+      return { error: "Bid must be higher than current bid" };
+    }
+    if (player.money < bidAmount) {
+      return { error: "Not enough money" };
+    }
 
     this.auctionState.currentBid = bidAmount;
     this.auctionState.highestBidderId = player.id;
-    this.log(`${player.name} bid $${bidAmount} on ${this.auctionState.tileName}.`);
+    this.auctionState.timeLeft = 15; // Reset 15s timer on every new bid!
+    this.log(`🔨 ${player.name} bid $${bidAmount} on ${this.auctionState.tileName}! (Clock reset to 15s)`);
     this.emitChange();
     this.checkBotAuction();
     return { success: true };
@@ -549,6 +700,10 @@ class MonopolyEngine {
 
   passBid(playerId) {
     if (!this.auctionState) return { error: "No active auction" };
+    if (this.auctionState.highestBidderId === playerId) {
+      return { error: "Highest bidder cannot pass" };
+    }
+
     if (!this.auctionState.passedPlayerIds.includes(playerId)) {
       this.auctionState.passedPlayerIds.push(playerId);
       const player = this.players.find(p => p.id === playerId);
@@ -557,29 +712,48 @@ class MonopolyEngine {
       }
     }
 
-    const activePlayers = this.players.filter(p => !p.bankrupt);
-    if (this.auctionState.passedPlayerIds.length >= activePlayers.length - (this.auctionState.highestBidderId ? 1 : 0)) {
-      // Auction completed
-      if (this.auctionState.highestBidderId) {
-        const winner = this.players.find(p => p.id === this.auctionState.highestBidderId);
-        const prop = this.properties[this.auctionState.propertyId];
-        this.deductCash(winner, this.auctionState.currentBid);
-        prop.owner = winner.id;
-        this.log(`Auction WON! ${winner.name} won ${this.auctionState.tileName} for $${this.auctionState.currentBid}.`);
-      } else {
-        this.log(`No bids placed. ${this.auctionState.tileName} remains with the Bank.`);
-      }
+    const activePlayers = this.players.filter(p => !p.bankrupt && p.connected !== false);
+    const remainingBidders = activePlayers.filter(p => 
+      !this.auctionState.passedPlayerIds.includes(p.id) && p.id !== this.auctionState.highestBidderId
+    );
 
-      this.auctionState = null;
-      this.turnPhase = "action";
-      this.emitChange();
-      this.checkBotTurn();
+    if (remainingBidders.length === 0) {
+      this.concludeAuction();
     } else {
       this.emitChange();
       this.checkBotAuction();
     }
 
     return { success: true };
+  }
+
+  concludeAuction() {
+    if (this.auctionTimer) {
+      clearInterval(this.auctionTimer);
+      this.auctionTimer = null;
+    }
+    if (this.botAuctionTimeout) {
+      clearTimeout(this.botAuctionTimeout);
+      this.botAuctionTimeout = null;
+    }
+    if (!this.auctionState) return;
+
+    if (this.auctionState.highestBidderId) {
+      const winner = this.players.find(p => p.id === this.auctionState.highestBidderId);
+      const prop = this.properties[this.auctionState.propertyId];
+      if (winner && prop) {
+        this.deductCash(winner, this.auctionState.currentBid);
+        prop.owner = winner.id;
+        this.log(`🏆 Auction WON! ${winner.name} won ${this.auctionState.tileName} for $${this.auctionState.currentBid}.`);
+      }
+    } else {
+      this.log(`Auction ended with no bids. ${this.auctionState.tileName} remains with the Bank.`);
+    }
+
+    this.auctionState = null;
+    this.turnPhase = "action";
+    this.emitChange();
+    this.checkBotTurn();
   }
 
   // Housing development (build / sell)
@@ -922,7 +1096,12 @@ class MonopolyEngine {
     return {
       roomId: this.roomId,
       status: this.status,
-      players: this.players,
+      hostId: this.hostId,
+      spectatorsCount: this.spectators ? this.spectators.size : 0,
+      players: this.players.map(p => ({
+        ...p,
+        isHost: (p.id === this.hostId)
+      })),
       turnIndex: this.turnIndex,
       turnPhase: this.turnPhase,
       dice: this.dice,
@@ -1034,21 +1213,47 @@ class MonopolyEngine {
 
   checkBotAuction() {
     if (!this.auctionState) return;
-    const bots = this.players.filter(p => p.isBot && !p.bankrupt && !this.auctionState.passedPlayerIds.includes(p.id));
-    if (bots.length === 0) return;
+    if (this.botAuctionTimeout) {
+      clearTimeout(this.botAuctionTimeout);
+      this.botAuctionTimeout = null;
+    }
 
-    // Slower auction thinking
-    setTimeout(() => {
+    const eligibleBots = this.players.filter(p => 
+      p.isBot && 
+      !p.bankrupt && 
+      p.connected !== false && 
+      !this.auctionState.passedPlayerIds.includes(p.id) && 
+      p.id !== this.auctionState.highestBidderId
+    );
+
+    if (eligibleBots.length === 0) {
+      const remainingBidders = this.players.filter(p => 
+        !p.bankrupt && 
+        p.connected !== false && 
+        !this.auctionState.passedPlayerIds.includes(p.id) && 
+        p.id !== this.auctionState.highestBidderId
+      );
+      if (remainingBidders.length === 0 && this.auctionState.highestBidderId) {
+        this.concludeAuction();
+      }
+      return;
+    }
+
+    const bot = eligibleBots[0];
+    const tile = BOARD[this.auctionState.propertyId];
+    if (!tile) return;
+
+    this.botAuctionTimeout = setTimeout(() => {
       if (!this.auctionState) return;
-      const tile = BOARD[this.auctionState.propertyId];
-      const bot = bots[0];
-      const maxBid = Math.floor(tile.cost * 0.9);
-      if (this.auctionState.currentBid + 20 <= maxBid && bot.money >= this.auctionState.currentBid + 20) {
-        this.placeBid(bot.id, this.auctionState.currentBid + 15);
+      const maxValuation = Math.floor(tile.cost * 0.85);
+      const nextBid = this.auctionState.currentBid + (this.auctionState.currentBid < 50 ? 10 : 20);
+
+      if (nextBid <= maxValuation && bot.money >= nextBid) {
+        this.placeBid(bot.id, nextBid);
       } else {
         this.passBid(bot.id);
       }
-    }, 2200);
+    }, 1400);
   }
 
   checkBotDebt() {
