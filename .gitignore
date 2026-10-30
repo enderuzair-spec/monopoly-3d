@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables & secrets
+.env
+.env.*
+*creds*.json
+tunnel_*.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# Saved games
+server/saved_games/*.json
+!server/saved_games/.gitkeep
+
+# OS generated files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,16 @@
+{
+  "name": "monopoly-online",
+  "version": "1.0.0",
+  "description": "Multiplayer Online Monopoly in Browser with Realtime Rooms and Bot Support",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.3",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}

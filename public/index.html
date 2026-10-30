@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monopoly 3D Deluxe - Video Game Edition</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+</head>
+<body class="three-mode">
+
+  <!-- ================= LOBBY SCREEN ================= -->
+  <div id="lobbyScreen" class="screen-container">
+    <div class="lobby-card glass-panel">
+      <div class="lobby-header">
+        <div class="edition-badge">✨ 3D DELUXE VIDEO-GAME EDITION</div>
+        <h1 class="game-logo">MONOPOLY 3D</h1>
+        <div class="logo-sub">INTERACTIVE 3D BOARD • KINEMATIC TOKENS • DELIBERATE BOT AI</div>
+      </div>
+
+      <!-- Initial Choice: Create or Join -->
+      <div id="lobbyInitialView">
+        <div class="form-group">
+          <label>SELECT SALOON GAME</label>
+          <div class="game-mode-selector" id="gameModeSelector" style="display: flex; gap: 10px; margin-bottom: 12px;">
+            <button type="button" class="btn btn-outline mode-tab-btn selected" data-mode="monopoly" id="modeMonopolyBtn" style="flex: 1; border-color: #eab308; color: #fde047; font-weight: 700; background: rgba(234, 179, 8, 0.15);">🎲 Monopoly 3D</button>
+            <button type="button" class="btn btn-outline mode-tab-btn" data-mode="uno" id="modeUnoBtn" style="flex: 1; border-color: #475569; color: #94a3b8; font-weight: 600; opacity: 0.7; cursor: not-allowed;" title="Saloon Uno is coming soon!" disabled>🃏 Saloon Uno <span style="font-size: 10px; background: rgba(239,68,68,0.25); color: #fca5a5; padding: 2px 6px; border-radius: 8px; margin-left: 4px; border: 1px solid rgba(239,68,68,0.4); font-weight: 800;">COMING SOON</span></button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>YOUR NAME</label>
+          <input type="text" id="playerNameInput" placeholder="Enter your player name" maxlength="16" value="">
+        </div>
+
+        <div class="form-group">
+          <label>CHOOSE YOUR TOKEN</label>
+          <div class="token-selector" id="tokenSelector">
+            <button type="button" class="token-btn selected" data-token="🎩">🎩 Top Hat</button>
+            <button type="button" class="token-btn" data-token="🚗">🚗 Roadster</button>
+            <button type="button" class="token-btn" data-token="🚢">🚢 Battleship</button>
+            <button type="button" class="token-btn" data-token="👞">👞 Classic Boot</button>
+            <button type="button" class="token-btn" data-token="🧵">🧵 Classic Thimble</button>
+            <button type="button" class="token-btn" data-token="✈️">✈️ Aviator</button>
+          </div>
+        </div>
+
+        <div class="lobby-actions">
+          <button id="createRoomBtn" class="btn btn-primary btn-lg">Create Game Room</button>
+          <div class="divider"><span>OR JOIN WITH CODE</span></div>
+          <div class="join-box">
+            <input type="text" id="joinRoomCodeInput" placeholder="Room Code (e.g. GAME-ABCD)" maxlength="12">
+            <button id="joinRoomBtn" class="btn btn-secondary">Join</button>
+          </div>
+          <button id="openResumeModalBtn" class="btn btn-outline" style="margin-top: 14px; width: 100%; border-color: #3b82f6; color: #93c5fd;">📂 Resume Saved Game</button>
+        </div>
+      </div>
+
+      <!-- Inside Waiting Room Lobby -->
+      <div id="lobbyWaitingView" class="hidden">
+        <div class="room-code-banner glass-panel">
+          <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
+            <div>
+              <span class="label">ROOM CODE</span>
+              <span id="displayRoomCode" class="code">----</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span id="lobbyGameModeBadge" class="badge" style="background:#854d0e; color:#fef08a; padding:4px 10px; border-radius:12px; font-weight:700; font-size:12px;">🎲 Monopoly 3D</span>
+            </div>
+          </div>
+          <button id="copyInviteBtn" class="btn btn-sm btn-outline" style="margin-top:8px;">📋 Copy Invite Link</button>
+        </div>
+
+        <div class="lobby-players-section">
+          <h3>Players in Room (<span id="playerCount">1</span>/6)</h3>
+          <div id="lobbyPlayersList" class="lobby-players-grid"></div>
+        </div>
+
+        <div class="lobby-controls">
+          <button id="addBotBtn" class="btn btn-outline">🤖 Add AI Bot</button>
+          <button id="startGameBtn" class="btn btn-success btn-lg">🚀 Launch Game</button>
+        </div>
+        <p class="hint-text">Add 1-3 AI Bots to play solo or invite friends via link!</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 3D GAME SCREEN ================= -->
+  <div id="gameScreen" class="screen-container hidden">
+    <!-- Fullscreen Three.js WebGL Canvas Container -->
+    <div id="threeContainer" class="three-container"></div>
+
+    <!-- Floating HUD Top Navigation Bar -->
+    <header class="hud-top-bar glass-panel">
+      <div class="header-left">
+        <span class="brand-title">MONOPOLY <strong>3D</strong></span>
+        <div class="room-pill">
+          Room: <strong id="gameRoomCode">----</strong>
+          <button id="headerShareBtn" title="Copy Invite Link">🔗</button>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div id="turnIndicator" class="turn-banner">Waiting for turn...</div>
+      </div>
+
+      <div class="header-right">
+        <!-- 3D Camera Mode Toggle -->
+        <button id="camModeBtn" class="btn btn-sm btn-outline" title="Toggle Camera Mode">🎥 Cam: Auto</button>
+        <button id="soundToggleBtn" class="icon-btn" title="Toggle Audio">🔊</button>
+        <button id="openCashDrawerBtn" class="btn btn-sm btn-outline" style="border-color:#eab308;color:#fde047;" title="Manage Banknotes & Change">💵 Cash Drawer (<span id="topBarCashVal">$1,500</span>)</button>
+        <button id="saveGameBtn" class="btn btn-sm btn-outline" title="Save Active Game" style="border-color:#10b981;color:#6ee7b7;">💾 Save Game</button>
+        <button id="openPropertiesBtn" class="btn btn-sm btn-outline">🏛️ Portfolio</button>
+        <button id="openTradeBtn" class="btn btn-sm btn-outline">🤝 Trade</button>
+        <button id="openRulesBtn" class="btn btn-sm btn-outline" style="border-color:#38bdf8;color:#7dd3fc;" title="Official Rules & Interactive Tutorial">📜 Rules & Guide</button>
+        <button id="openSettingsBtn" class="btn btn-sm btn-outline" style="border-color:#a855f7;color:#d8b4fe;" title="Game Settings & Options (ESC)">⚙️ Settings</button>
+      </div>
+    </header>
+    <!-- Floating AFK Auto-Play Status Pill -->
+    <div id="afkActiveBanner" class="afk-active-banner hidden">
+      <span class="afk-pulse-dot"></span>
+      <span>🤖 AFK Auto-Play Active</span>
+      <button id="afkTakeControlBtn" class="afk-take-control-btn">Take Control</button>
+    </div>
+
+
+    <!-- Floating HUD Bottom Center: Video Game Action Controls -->
+    <div class="hud-bottom-center">
+      <!-- Game Prompt Message -->
+            <!-- Optional Interactive Gameplay Tutorial Coach -->
+      <div id="tutorialCoachBox" class="tutorial-coach-box glass-panel">
+        <div class="coach-top-bar">
+          <div class="coach-badge">
+            <span class="coach-icon">💡</span>
+            <span class="coach-title">TUTORIAL COACH</span>
+          </div>
+          <button id="toggleCoachBtn" class="coach-toggle-btn" title="Toggle Coach Guidance Tips">Tips: ON</button>
+        </div>
+        <div id="coachText" class="coach-text">
+          When it's your turn, click <strong>Roll Dice</strong> to toss the bone dice across the table.
+        </div>
+      </div>
+      <div id="gamePrompt" class="game-prompt glass-panel">Welcome to Monopoly 3D! Click any space on the board to view its Title Deed.</div>
+
+      <!-- Action Controls Bar -->
+      <div class="center-controls" id="centerControls">
+        <button id="rollDiceBtn" class="btn btn-primary btn-lg btn-pulse">🎲 Roll Dice</button>
+        <button id="buyPropertyBtn" class="btn btn-success btn-lg hidden">💰 Buy Property</button>
+        <button id="auctionBtn" class="btn btn-warning btn-lg hidden">🔨 Send to Auction</button>
+        <button id="payJailBtn" class="btn btn-secondary hidden">💸 Pay $50 Jail Fine</button>
+        <button id="useJailCardBtn" class="btn btn-outline hidden">🎫 Use Jail Card</button>
+        <button id="endTurnBtn" class="btn btn-accent btn-lg hidden">➡️ End Turn</button>
+      </div>
+    </div>
+
+    <!-- Unified Right Sidebar: Players HUD + Activity Log & Chat -->
+    <aside class="hud-right-sidebar glass-panel">
+      <!-- Members / Players Section -->
+      <div class="sidebar-players-section">
+        <div class="sidebar-section-title">
+          <span>MEMBERS AT TABLE</span>
+          <span class="badge" id="hudPlayerCount">0</span>
+        </div>
+        <div id="playersHudList" class="players-hud-list"></div>
+      </div>
+
+      <!-- Live Activity Log & Chat -->
+      <div class="sidebar-log-section">
+        <div class="tab-header">
+          <button class="tab-btn active" data-tab="logTab">Activity Log</button>
+          <button class="tab-btn" data-tab="chatTab">Room Chat</button>
+          <button class="tab-btn" data-tab="guideTab">📖 Rules</button>
+        </div>
+        <div id="logTab" class="tab-content active">
+          <div id="gameLogList" class="log-list"></div>
+        </div>
+        <div id="chatTab" class="tab-content">
+          <div id="chatMessagesList" class="chat-list"></div>
+          <form id="chatForm" class="chat-input-bar">
+            <input type="text" id="chatInput" placeholder="Type message..." maxlength="120">
+            <button type="submit" class="btn btn-sm btn-primary">Send</button>
+          </form>
+        </div>
+      </div>
+    
+        <div id="guideTab" class="tab-content">
+          <div class="guide-scroll-list">
+            <div class="guide-card">
+              <h4>🎯 Objective</h4>
+              <p>Bankrupt all rivals by acquiring properties, collecting rents, and building complete color monopolies.</p>
+            </div>
+            <div class="guide-card">
+              <h4>🎲 Turn Sequence</h4>
+              <p>1. <strong>Roll Dice:</strong> Advance clockwise. Rolling doubles awards a free bonus roll!</p>
+              <p>2. <strong>Tile Action:</strong> Buy unowned property, send it to public auction, pay rent, or draw mystery cards.</p>
+              <p>3. <strong>End Turn:</strong> Pass play, or take your bonus roll if you rolled doubles (3 doubles = Jail!).</p>
+            </div>
+            <div class="guide-card">
+              <h4>🏠 Monopolies & Hotels</h4>
+              <p>Owning all streets of one color forms a <strong>Monopoly</strong>, which doubles unimproved rent! Construct up to 4 Houses, then 1 Hotel to charge massive rents.</p>
+            </div>
+            <div class="guide-card">
+              <h4>🔒 Jail & Bail</h4>
+              <p>Escape Jail by: rolling doubles within 3 turns, paying $50 bail, or using a "Get Out of Jail Free" card. You still collect rent while detained!</p>
+            </div>
+            <div class="guide-card">
+              <h4>🔨 Auctions & Trades</h4>
+              <p>Unbought properties go to a live public auction starting at $10. Open <strong>Trade</strong> anytime to swap deeds, cash, or jail cards with players or AI bots.</p>
+            </div>
+            <div class="guide-card">
+              <h4>💸 Mortgages & Bankruptcy</h4>
+              <p>Mortgage unimproved properties for 50% value to survive debt. If you cannot raise funds to settle a debt, you declare Bankruptcy!</p>
+            </div>
+            <button id="sidebarOpenModalBtn" class="btn btn-sm btn-primary" style="margin-top:6px;width:100%;">📜 Interactive Tutorial & Full Manual</button>
+          </div>
+        </div>
+    </aside>
+
+    <!-- Live Auction 3D Overlay -->
+    <div id="auctionOverlay" class="auction-box glass-panel hidden">
+      <div class="auction-title">🔨 LIVE PROPERTY AUCTION</div>
+      <div class="auction-property" id="auctionPropName">Atlantic Avenue</div>
+      <div class="auction-bid">Current Bid: <strong id="auctionCurrentBid">$10</strong> (<span id="auctionLeader">No bids</span>)</div>
+      <div class="auction-actions">
+        <button id="bid10Btn" class="btn btn-success">+$10 Bid</button>
+        <button id="bid50Btn" class="btn btn-success">+$50 Bid</button>
+        <button id="passAuctionBtn" class="btn btn-danger">Pass</button>
+      </div>
+    </div>
+
+    <!-- Debt Resolution Overlay -->
+    <div id="debtOverlay" class="debt-box glass-panel hidden">
+      <div class="debt-title">⚠️ DEBT RESOLUTION REQUIRED</div>
+      <div class="debt-info" id="debtInfoText">You owe money! Mortgage properties or sell houses to raise cash.</div>
+      <div class="debt-actions">
+        <button id="settleDebtBtn" class="btn btn-success btn-sm">Pay Debt</button>
+        <button id="bankruptBtn" class="btn btn-danger btn-sm">Declare Bankruptcy</button>
+      </div>
+    </div>
+
+    <!-- Active Chance / Community Chest Card Popup (Deprecated fallback) -->
+    <div id="cardDisplay" class="card-display glass-panel hidden">
+      <div class="card-tag" id="cardTypeTag">CHANCE</div>
+      <div class="card-body" id="cardBodyText">Advance to Boardwalk.</div>
+      <button id="dismissCardBtn" class="btn btn-secondary">OK</button>
+    </div>
+
+    <!-- ================= AUTHENTIC DRAWN PLAYING CARD MODAL (FOR YOUR PLAYER) ================= -->
+    <div id="cardModalBackdrop" class="modal-backdrop hidden">
+      <div class="card-drawn-container" id="cardDrawnContainer">
+        <button class="card-drawn-close-btn" id="closeCardDrawnBtn">✕</button>
+        <div class="physical-drawn-card" id="physicalDrawnCard">
+          <div class="card-inner-frame">
+            <div class="card-vintage-header" id="drawnCardHeader">
+              <span class="card-corner-symbol">♦</span>
+              <span class="card-vintage-title" id="drawnCardTypeLabel">CHANCE</span>
+              <span class="card-corner-symbol">♦</span>
+            </div>
+            
+            <div class="card-emblem-wrapper">
+              <div class="card-emblem-badge" id="drawnCardEmblemBadge">
+                <span id="drawnCardEmblemIcon">❓</span>
+              </div>
+            </div>
+
+            <div class="card-instruction-text" id="drawnCardInstructionText">
+              Advance to Boardwalk.
+            </div>
+
+            <div class="card-flavor-banner" id="drawnCardFlavor">TAKE A RIDE WITH DESTINY</div>
+
+            <div class="card-footer-action">
+              <button id="dismissDrawnCardBtn" class="btn btn-success card-continue-btn">✓ Accept & Continue</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Rent Toast Banner -->
+    <div id="rentBanner" class="rent-toast glass-panel hidden">
+      <div id="eventToastIcon" class="rent-toast-icon">💰</div>
+      <div class="rent-toast-content">
+        <div id="eventToastTitle" class="rent-toast-title">RENT PAID</div>
+        <div id="rentToastDesc" class="rent-toast-desc">Player paid $50 rent to Boardwalk Owner</div>
+      </div>
+    </div>
+
+    <!-- ================= SALOON UNO GAME AREA ================= -->
+    <div id="unoGameArea" class="uno-game-area hidden">
+      <!-- Uno Center Table Layout -->
+      <div class="uno-center-table">
+        <div class="uno-piles-container">
+          <!-- Draw Pile -->
+          <div id="unoDrawPile" class="uno-draw-pile" title="Click to Draw a Card">
+            <div class="uno-card-back">
+              <span class="uno-logo-text">UNO</span>
+              <span class="uno-deck-counter" id="unoDrawPileCount">108</span>
+            </div>
+            <div class="pile-label">DRAW PILE</div>
+          </div>
+
+          <!-- Active Discard Pile -->
+          <div class="uno-discard-container">
+            <div id="unoDiscardCard" class="uno-card uno-discard-card red">
+              <div class="uno-card-inner">
+                <span class="uno-card-corner top-left">7</span>
+                <div class="uno-card-center">7</div>
+                <span class="uno-card-corner bottom-right">7</span>
+              </div>
+            </div>
+            <div class="pile-label">
+              ACTIVE: <span id="unoActiveColorText" style="font-weight:800; text-transform:uppercase; color:#ef4444;">RED</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Direction & Action Indicator -->
+        <div class="uno-table-indicator">
+          <div id="unoDirectionIndicator" class="uno-direction-badge">⟳ Clockwise</div>
+          <button id="unoShoutBtn" class="uno-shout-btn" title="Shout UNO when you have 1 card left!">🔥 SHOUT UNO!</button>
+        </div>
+      </div>
+
+      <!-- Player Hand Fan along bottom of screen -->
+      <div class="uno-player-hand-container">
+        <div class="uno-hand-header">
+          <span>YOUR HAND (<span id="unoHandCount">7</span> CARDS)</span>
+          <button id="unoDrawActionBtn" class="btn btn-sm btn-outline" style="border-color:#38bdf8; color:#7dd3fc;">+ Draw Card</button>
+        </div>
+        <div id="unoHandCards" class="uno-hand-cards">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MONOPOLY CASH DRAWER MODAL ================= -->
+  <div id="cashDrawerModal" class="modal-backdrop hidden">
+    <div class="cash-drawer-dialog glass-panel">
+      <div class="cash-drawer-top">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:28px;">💵</span>
+          <div>
+            <h3 style="font-family:'Cinzel',serif; margin:0; color:#fde047; font-size:20px;">MONOPOLY CASH REGISTER & DRAWER</h3>
+            <p style="margin:2px 0 0 0; font-size:12px; color:#94a3b8;">Manage individual banknotes, view denominations, and make change at the Bank</p>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px;">
+          <div class="cash-total-badge">Total Cash: <strong id="cashDrawerTotalAmount">$1,500</strong></div>
+          <button id="closeCashDrawerBtn" class="close-btn">&times;</button>
+        </div>
+      </div>
+
+      <!-- Banknote Tray Grid -->
+      <div class="banknote-tray-grid" id="banknoteTrayGrid">
+        <!-- Populated dynamically: $500, $100, $50, $20, $10, $5, $1 -->
+      </div>
+
+      <div class="cash-drawer-bottom-bar">
+        <div style="font-size:12px; color:#cbd5e1; max-width:65%;">
+          💡 <strong>Passive Change System:</strong> The Bank automatically returns change when you pay rent or purchase deeds. Use <strong>"Break Note"</strong> to convert larger bills into smaller denominations!
+        </div>
+        <button id="quickBreakLargestBtn" class="btn btn-outline" style="border-color:#eab308; color:#fde047; font-weight:700;">
+          ⚡ Break Highest Note
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= UNO WILD COLOR CHOOSER MODAL ================= -->
+  <div id="unoColorModal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" style="max-width: 440px; text-align:center;">
+      <h3 style="font-family:'Cinzel',serif; color:#fde047; margin-bottom:8px;">🎨 CHOOSE NEXT ACTIVE COLOR</h3>
+      <p style="font-size:13px; color:#94a3b8; margin-bottom:20px;">You played a Wild Card! Pick the color all players must follow.</p>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-bottom:16px;">
+        <button class="btn uno-color-btn" data-color="red" style="background:#dc2626; color:#fff; font-weight:800; font-size:16px; padding:18px; border-radius:12px; cursor:pointer;">🔴 RED</button>
+        <button class="btn uno-color-btn" data-color="blue" style="background:#2563eb; color:#fff; font-weight:800; font-size:16px; padding:18px; border-radius:12px; cursor:pointer;">🔵 BLUE</button>
+        <button class="btn uno-color-btn" data-color="green" style="background:#16a34a; color:#fff; font-weight:800; font-size:16px; padding:18px; border-radius:12px; cursor:pointer;">🟢 GREEN</button>
+        <button class="btn uno-color-btn" data-color="yellow" style="background:#ca8a04; color:#fff; font-weight:800; font-size:16px; padding:18px; border-radius:12px; cursor:pointer;">🟡 YELLOW</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= AUTHENTIC TITLE DEED CARD MODAL ================= -->
+  <div id="deedModal" class="modal-backdrop hidden">
+    <div class="deed-container">
+      <button class="deed-close-btn" id="closeDeedModal">✕</button>
+      <div class="title-deed-card" id="titleDeedCard">
+        <!-- Colored Header Banner -->
+        <div class="deed-header" id="deedHeader">
+          <div class="deed-title-label">TITLE DEED</div>
+          <div class="deed-name" id="deedPropName">BOARDWALK</div>
+        </div>
+        <!-- Deed Rents Content -->
+        <div class="deed-body" id="deedBody">
+          <!-- Populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PROPERTY MANAGEMENT & SPECIAL ASSETS MODAL ================= -->
+  <div id="propertiesModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg glass-panel" style="max-width: 860px; max-height: 88vh;">
+      <div class="modal-header">
+        <h2>🏛️ Property Portfolio & Real Estate Empire</h2>
+        <button class="close-btn" id="closePropertiesModal">✕</button>
+      </div>
+      <div class="modal-body" style="max-height: 74vh; overflow-y: auto; padding-right: 8px;">
+        <!-- SECTION 1: SPECIAL ASSETS / GET OUT OF JAIL FREE CARDS -->
+        <div class="portfolio-section" id="portfolioSpecialSection" style="margin-bottom: 20px;">
+          <h3 style="font-size: 15px; font-weight: 800; color: #facc15; margin-bottom: 8px; display:flex; align-items:center; gap:8px;">
+            <span>🗝️</span> Special Assets & Jail Release Cards
+          </h3>
+          <div id="jailCardsContainer" class="jail-cards-grid"></div>
+        </div>
+
+        <!-- SECTION 2: REAL ESTATE TITLE DEEDS & DEVELOPMENTS -->
+        <div class="portfolio-section">
+          <h3 style="font-size: 15px; font-weight: 800; color: #38bdf8; margin-bottom: 6px; display:flex; align-items:center; gap:8px;">
+            <span>🏛️</span> Real Estate Title Deeds & Improvements
+          </h3>
+          <p class="modal-hint" style="margin-bottom: 12px;">Build 3D houses or hotels on complete color monopolies, or mortgage properties for quick capital.</p>
+          <div id="propertyPortfolioList" class="portfolio-visual-grid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= TRADE PROPOSAL MODAL ================= -->
+  <div id="tradeModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg glass-panel">
+      <div class="modal-header">
+        <h2>🤝 Propose a Trade Deal</h2>
+        <button class="close-btn" id="closeTradeModal">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Target Player:</label>
+          <select id="tradeTargetSelect" class="select-input"></select>
+        </div>
+
+        <div class="trade-split">
+          <!-- Left: What You Offer -->
+          <div class="trade-side">
+            <h3>YOU OFFER</h3>
+            <div class="form-group">
+              <label>Cash Offer ($):</label>
+              <input type="number" id="tradeOfferCash" min="0" value="0" step="10">
+            </div>
+            <div class="form-group">
+              <label>Properties to Offer:</label>
+              <div id="tradeMyPropertiesList" class="checkbox-list"></div>
+            </div>
+          </div>
+
+          <!-- Right: What You Request -->
+          <div class="trade-side">
+            <h3>YOU REQUEST</h3>
+            <div class="form-group">
+              <label>Cash Request ($):</label>
+              <input type="number" id="tradeRequestCash" min="0" value="0" step="10">
+            </div>
+            <div class="form-group">
+              <label>Properties to Request:</label>
+              <div id="tradeTargetPropertiesList" class="checkbox-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="submitTradeBtn" class="btn btn-primary btn-lg">Send Deal Proposal</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= INCOMING TRADE MODAL ================= -->
+  <div id="tradeIncomingModal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel">
+      <div class="modal-header">
+        <h2>🤝 Incoming Trade Proposal!</h2>
+      </div>
+      <div class="modal-body">
+        <p id="incomingTradeSummary"></p>
+        <div class="trade-comparison">
+          <div class="side-box">
+            <h4>You Will Receive:</h4>
+            <div id="incomingTheyOffer"></div>
+          </div>
+          <div class="side-box">
+            <h4>They Want From You:</h4>
+            <div id="incomingTheyRequest"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="acceptTradeBtn" class="btn btn-success btn-lg">Accept Deal</button>
+        <button id="declineTradeBtn" class="btn btn-danger btn-lg">Decline</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DEVELOPER TOOLS MODAL (Passcode: 125) ================= -->
+  <div id="devModal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" style="max-width: 620px;">
+      <div class="modal-header">
+        <h2 style="color: #fde047;">🛠️ Developer Debug & Cheats Panel</h2>
+        <button id="closeDevModalBtn" class="close-btn">&times;</button>
+      </div>
+
+      <!-- Password Lock Screen -->
+      <div id="devLockScreen" class="modal-body" style="text-align: center; padding: 24px;">
+        <p style="margin-bottom: 16px; color: #cbd5e1;">Enter developer passcode to enable troubleshooting tools.</p>
+        <div style="display: flex; gap: 8px; justify-content: center; max-width: 320px; margin: 0 auto;">
+          <input type="password" id="devPassInput" placeholder="Passcode" style="padding: 10px 14px; border-radius: 8px; background: #1e293b; border: 1px solid #475569; color: white; width: 100%;">
+          <button id="devUnlockBtn" class="btn btn-primary">Unlock</button>
+        </div>
+        <p id="devPassError" style="color: #ef4444; margin-top: 10px; font-size: 13px;" class="hidden">Incorrect passcode. Try again.</p>
+      </div>
+
+      <!-- Unlocked Developer Controls -->
+      <div id="devControlsScreen" class="modal-body hidden" style="max-height: 520px; overflow-y: auto;">
+        <!-- Teleportation -->
+        <div class="dev-section" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+          <h4 style="color: #60a5fa; margin-bottom: 10px;">🚀 Teleport Position</h4>
+          <div style="display: flex; gap: 8px;">
+            <select id="devTeleportSelect" style="flex: 1; padding: 8px; border-radius: 6px; background: #1e293b; color: white; border: 1px solid #475569;"></select>
+            <button id="devTeleportBtn" class="btn btn-sm btn-primary">Teleport Me</button>
+          </div>
+        </div>
+
+        <!-- Cash Manipulator -->
+        <div class="dev-section" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+          <h4 style="color: #4ade80; margin-bottom: 10px;">💰 Cash Manipulator</h4>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-outline dev-money-btn" data-amt="500">+ $500</button>
+            <button class="btn btn-sm btn-outline dev-money-btn" data-amt="2000">+ $2,000</button>
+            <button class="btn btn-sm btn-outline dev-money-btn" data-set="10000">Set $10,000</button>
+            <button class="btn btn-sm btn-outline dev-money-btn" data-set="20">Set $20 (Debt Test)</button>
+            <button id="devStimulusBtn" class="btn btn-sm btn-warning">+$1,000 to All Players</button>
+          </div>
+        </div>
+
+        <!-- Rig Dice -->
+        <div class="dev-section" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+          <h4 style="color: #fb923c; margin-bottom: 10px;">🎲 Rig Dice (Force Exact Roll)</h4>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <label>Die 1: <select id="devDie1" style="background:#1e293b;color:white;padding:4px 8px;border-radius:4px;"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+            <label>Die 2: <select id="devDie2" style="background:#1e293b;color:white;padding:4px 8px;border-radius:4px;"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+            <button id="devForceRollBtn" class="btn btn-sm btn-primary">Force Roll Dice</button>
+          </div>
+        </div>
+
+        <!-- Cards & Events -->
+        <div class="dev-section" style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 16px;">
+          <h4 style="color: #c084fc; margin-bottom: 10px;">📦 Event Triggers</h4>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="devDrawChanceBtn" class="btn btn-sm btn-outline">Draw Chance Card</button>
+            <button id="devDrawChestBtn" class="btn btn-sm btn-outline">Draw Chest Card</button>
+            <button id="devSendJailBtn" class="btn btn-sm btn-danger">Send Me to Jail</button>
+            <button id="devReleaseJailBtn" class="btn btn-sm btn-success">Bail Out of Jail</button>
+          </div>
+        </div>
+
+        <!-- Instant Monopolies -->
+        <div class="dev-section">
+          <h4 style="color: #38bdf8; margin-bottom: 10px;">🏛️ Instant Monopoly & Hotels</h4>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button id="devGiveMonopolyBtn" class="btn btn-sm btn-outline">Grant Boardwalk & Park Place</button>
+            <button id="devBuildHotelCurrentBtn" class="btn btn-sm btn-outline">Build Grand Hotel on Current Space</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= VICTORY MODAL ================= -->
+  <div id="victoryModal" class="modal-backdrop hidden">
+    <div class="modal-card victory-card glass-panel">
+      <div class="trophy-icon">🏆</div>
+      <h1 class="victory-title">VICTORY!</h1>
+      <p class="victory-subtitle"><strong id="winnerName">Player</strong> has bankrupted all rivals and conquered the 3D Monopoly board!</p>
+      <div class="modal-footer">
+        <button id="playAgainBtn" class="btn btn-primary btn-lg">Play Another Match</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= SAVED GAMES MODAL ================= -->
+  <div id="savedGamesModal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" style="max-width: 560px;">
+      <div class="modal-header">
+        <h2 style="color: #60a5fa;">📂 Saved Games & Rejoin Session</h2>
+        <button id="closeSavedGamesModalBtn" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-hint" style="color: #94a3b8; font-size: 13px; margin-bottom: 12px;">Resume an active session from local storage / server saves, or upload an exported save file:</p>
+        <div id="savedGamesList" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; max-height: 260px; overflow-y: auto;">
+          <div style="color: #94a3b8; text-align: center; padding: 24px;">Scanning for saved sessions...</div>
+        </div>
+        <div style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px; display: flex; gap: 10px; align-items: center;">
+          <input type="file" id="loadSaveFileInput" accept=".json" style="display: none;">
+          <button id="uploadSaveFileBtn" class="btn btn-sm btn-outline" style="flex: 1;">📥 Upload Save File (.json)</button>
+          <button id="refreshSavesBtn" class="btn btn-sm btn-outline">🔄 Refresh</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- ================= RULES & INTERACTIVE TUTORIAL MODAL ================= -->
+  <div id="rulesModal" class="modal-backdrop hidden">
+    <div class="modal-card modal-lg glass-panel" style="max-width: 780px;">
+      <div class="modal-header">
+        <h2 style="color: #38bdf8; display:flex; align-items:center; gap:10px;">
+          <span>📜</span> Monopoly 3D Official Rules & Tutorial
+        </h2>
+        <button id="closeRulesModalBtn" class="close-btn">&times;</button>
+      </div>
+
+      <!-- Tutorial Modal Category Tabs -->
+      <div class="rules-tab-nav" style="display:flex; gap:8px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:8px; margin-bottom:14px; overflow-x:auto;">
+        <button class="rules-nav-btn active" data-rules-tab="rulesQuick">🎯 Quick Start</button>
+        <button class="rules-nav-btn" data-rules-tab="rulesProps">🏠 Properties & Rent</button>
+        <button class="rules-nav-btn" data-rules-tab="rulesSpecial">🔒 Special Tiles</button>
+        <button class="rules-nav-btn" data-rules-tab="rulesAuctions">🔨 Auctions & Trade</button>
+        <button class="rules-nav-btn" data-rules-tab="rulesSimulator">🎓 Interactive Tutorial</button>
+      </div>
+
+      <div class="modal-body" style="max-height: 520px; overflow-y: auto; padding-right: 8px;">
+        <!-- TAB 1: QUICK START -->
+        <div id="rulesQuick" class="rules-section-content active">
+          <h3 style="color:#fde047; margin-bottom:8px;">🎯 Game Objective & Overview</h3>
+          <p style="color:#cbd5e1; line-height:1.6; margin-bottom:14px;">
+            The object of Monopoly 3D is to become the wealthiest player through buying, renting, and trading real estate properties, ultimately forcing all opponents into bankruptcy.
+          </p>
+          <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin-bottom:16px;">
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px;">
+              <h4 style="color:#60a5fa; margin-bottom:6px;">1. Roll & Move</h4>
+              <p style="font-size:13px; color:#94a3b8;">Click <strong>Roll Dice</strong> on your turn. Your token moves clockwise according to the total of both dice.</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px;">
+              <h4 style="color:#4ade80; margin-bottom:6px;">2. Buy or Auction</h4>
+              <p style="font-size:13px; color:#94a3b8;">If you land on unowned property, you may purchase it from the Bank at face value, or send it to public auction for open bidding.</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px;">
+              <h4 style="color:#f87171; margin-bottom:6px;">3. Pay or Collect Rent</h4>
+              <p style="font-size:13px; color:#94a3b8;">Landing on another player's property requires paying them rent. Unimproved monopoly sets charge double rent; houses and hotels charge massive sums!</p>
+            </div>
+            <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:12px;">
+              <h4 style="color:#c084fc; margin-bottom:6px;">4. Rolling Doubles</h4>
+              <p style="font-size:13px; color:#94a3b8;">If both dice show the same number, you take an immediate bonus roll! But be careful: rolling doubles 3 times in one turn sends you straight to Jail.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 2: PROPERTIES & RENT -->
+        <div id="rulesProps" class="rules-section-content" style="display:none;">
+          <h3 style="color:#4ade80; margin-bottom:8px;">🏠 Properties, Monopolies & Hotels</h3>
+          <p style="color:#cbd5e1; line-height:1.6; margin-bottom:14px;">
+            The board features 28 properties: 22 colored street properties divided into 8 color groups, 4 Railroads, and 2 Utilities.
+          </p>
+          <div style="margin-bottom:14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+            <h4 style="color:#fbbf24; margin-bottom:6px;">⭐ Color Monopolies (2x Rent Multiplier)</h4>
+            <p style="font-size:13px; color:#94a3b8; line-height:1.5;">
+              When a player owns all properties of a single color group (e.g. both Dark Blue properties, or all three Red properties), the base rent for unimproved properties in that color group is <strong>doubled</strong>!
+            </p>
+          </div>
+          <div style="margin-bottom:14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+            <h4 style="color:#38bdf8; margin-bottom:6px;">🏗️ Building Houses & Grand Hotels</h4>
+            <p style="font-size:13px; color:#94a3b8; line-height:1.5;">
+              Once you possess a monopoly, you can purchase Houses evenly across your group. Each house dramatically multiplies the rent. When you have 4 houses on a property, you can upgrade to a <strong>Grand Hotel</strong> to bankrupt careless travelers!
+            </p>
+          </div>
+          <div style="margin-bottom:14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+            <h4 style="color:#a78bfa; margin-bottom:6px;">🚂 Railroads & 💡 Utilities</h4>
+            <p style="font-size:13px; color:#94a3b8; line-height:1.5;">
+              • <strong>Railroads:</strong> 1 RR = $25 | 2 RRs = $50 | 3 RRs = $100 | 4 RRs = $200.<br>
+              • <strong>Utilities:</strong> Rent is 4x dice roll with 1 utility, or 10x dice roll if owning both Electric Company and Water Works!
+            </p>
+          </div>
+        </div>
+
+        <!-- TAB 3: SPECIAL TILES -->
+        <div id="rulesSpecial" class="rules-section-content" style="display:none;">
+          <h3 style="color:#fde047; margin-bottom:8px;">🔒 Corner & Special Board Spaces</h3>
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="padding:10px; border-left:4px solid #10b981; background:rgba(16,185,129,0.08); border-radius:4px;">
+              <strong style="color:#34d399;">COLLECT $200 SALARY AS YOU PASS GO:</strong>
+              <p style="font-size:13px; color:#cbd5e1; margin-top:2px;">Every time your token lands on or passes GO in clockwise progression, you collect $200 from the Bank.</p>
+            </div>
+            <div style="padding:10px; border-left:4px solid #f59e0b; background:rgba(245,158,11,0.08); border-radius:4px;">
+              <strong style="color:#fbbf24;">IN JAIL / JUST VISITING:</strong>
+              <p style="font-size:13px; color:#cbd5e1; margin-top:2px;">
+                Landing directly on Jail means you are "Just Visiting" with no penalty.<br>
+                If sent to Jail (via Go to Jail tile, 3 doubles, or Chance/Chest card), you are incarcerated. You can get out by:
+                <br>1. Rolling doubles on any of your next 3 turns.
+                <br>2. Paying a $50 fine before rolling.
+                <br>3. Using a "Get Out of Jail Free" card.
+                <br><em>*Important: You still collect full rent from other players while serving time in Jail!</em>
+              </p>
+            </div>
+            <div style="padding:10px; border-left:4px solid #38bdf8; background:rgba(56,189,248,0.08); border-radius:4px;">
+              <strong style="color:#7dd3fc;">FREE PARKING:</strong>
+              <p style="font-size:13px; color:#cbd5e1; margin-top:2px;">A safe resting spot where no rent or fines are owed.</p>
+            </div>
+            <div style="padding:10px; border-left:4px solid #ec4899; background:rgba(236,72,153,0.08); border-radius:4px;">
+              <strong style="color:#f472b6;">CHANCE & COMMUNITY CHEST:</strong>
+              <p style="font-size:13px; color:#cbd5e1; margin-top:2px;">Draw a card containing surprise prizes, teleportation orders, bank dividends, or repair costs.</p>
+            </div>
+            <div style="padding:10px; border-left:4px solid #ef4444; background:rgba(239,68,68,0.08); border-radius:4px;">
+              <strong style="color:#f87171;">INCOME TAX ($200) & LUXURY TAX ($100):</strong>
+              <p style="font-size:13px; color:#cbd5e1; margin-top:2px;">Mandatory assessment fees paid immediately to the Bank.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 4: AUCTIONS & TRADING -->
+        <div id="rulesAuctions" class="rules-section-content" style="display:none;">
+          <h3 style="color:#fb923c; margin-bottom:8px;">🔨 Auctions, Trading & Debt Relief</h3>
+          <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px; margin-bottom:12px;">
+            <h4 style="color:#f97316; margin-bottom:6px;">🔨 Live Property Auctions</h4>
+            <p style="font-size:13px; color:#cbd5e1; line-height:1.5;">
+              Whenever a player declines to buy an unowned property they landed on, it is automatically put up for public auction starting at <strong>$10</strong>.
+              All players (including the player who declined) can place bids in increments of +$10 or +$50. The last player remaining wins the deed!
+            </p>
+          </div>
+          <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px; margin-bottom:12px;">
+            <h4 style="color:#60a5fa; margin-bottom:6px;">🤝 Player-to-Player Trading</h4>
+            <p style="font-size:13px; color:#cbd5e1; line-height:1.5;">
+              Click the <strong>🤝 Trade</strong> button at any time to propose mutual exchanges of properties, cash, or Jail cards with other players or AI bots. AI bots analyze fair market value before accepting.
+            </p>
+          </div>
+          <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:14px;">
+            <h4 style="color:#ef4444; margin-bottom:6px;">💸 Mortgages & Avoiding Bankruptcy</h4>
+            <p style="font-size:13px; color:#cbd5e1; line-height:1.5;">
+              If you owe rent or taxes and have insufficient cash, you can mortgage unimproved properties to the Bank for 50% of their printed purchase value. Mortgaged properties collect no rent until unmortgaged for 10% interest.
+            </p>
+          </div>
+        </div>
+
+        <!-- TAB 5: INTERACTIVE SIMULATOR WALKTHROUGH -->
+        <div id="rulesSimulator" class="rules-section-content" style="display:none;">
+          <h3 style="color:#38bdf8; margin-bottom:8px;">🎓 Interactive Walkthrough Simulator</h3>
+          <p style="color:#94a3b8; font-size:13px; margin-bottom:14px;">
+            Click through this quick 5-step simulator to experience a sample Monopoly match and master the winning strategy:
+          </p>
+
+          <div id="simContainer" style="background:#0f172a; border:1px solid #334155; border-radius:12px; padding:18px;">
+            <div id="simStepHeader" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span id="simStepBadge" style="background:#2563eb; color:white; font-size:11px; font-weight:800; padding:3px 10px; border-radius:12px;">STEP 1 OF 5</span>
+              <span id="simStepTitle" style="color:#fde047; font-weight:700;">Rolling the Dice</span>
+            </div>
+
+            <div id="simVisual" style="min-height:90px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.03); border-radius:8px; margin-bottom:14px; font-size:32px;">
+              🎲 🎲
+            </div>
+
+            <p id="simExplanation" style="color:#cbd5e1; font-size:13px; line-height:1.6; min-height:55px; margin-bottom:16px;">
+              You begin on GO with $1,500 cash. On your turn, you toss the bone dice and roll a 3 and 5 (total 8). Your token hops 8 spaces forward and lands on <strong>Vermont Avenue</strong> ($100).
+            </p>
+
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <button id="simPrevBtn" class="btn btn-sm btn-outline" disabled>← Previous</button>
+              <div id="simIndicators" style="display:flex; gap:6px;">
+                <span class="sim-dot active" style="width:8px; height:8px; border-radius:50%; background:#38bdf8;"></span>
+                <span class="sim-dot" style="width:8px; height:8px; border-radius:50%; background:#475569;"></span>
+                <span class="sim-dot" style="width:8px; height:8px; border-radius:50%; background:#475569;"></span>
+                <span class="sim-dot" style="width:8px; height:8px; border-radius:50%; background:#475569;"></span>
+                <span class="sim-dot" style="width:8px; height:8px; border-radius:50%; background:#475569;"></span>
+              </div>
+              <button id="simNextBtn" class="btn btn-sm btn-primary">Next: Buying Property →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    
+  <!-- ================= GAME SETTINGS & OPTIONS MODAL ================= -->
+  <div id="settingsModal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" style="max-width: 580px;">
+      <div class="modal-header">
+        <h2 style="color: #c084fc; display:flex; align-items:center; gap:10px;">
+          <span>⚙️</span> Game Settings & Options
+        </h2>
+        <button id="closeSettingsModalBtn" class="close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body" style="max-height: 520px; overflow-y: auto; padding-right: 6px;">
+        <!-- SECTION 1: AUDIO SETTINGS -->
+        <div class="settings-group">
+          <h4 class="settings-group-title" style="color: #38bdf8;">🔊 Audio & Tavern Ambiance</h4>
+
+          <div class="settings-row">
+            <label for="masterVolSlider">Master Volume: <strong id="masterVolVal">80%</strong></label>
+            <input type="range" id="masterVolSlider" min="0" max="100" value="80" class="settings-slider">
+          </div>
+
+          <div class="settings-row">
+            <label for="sfxVolSlider">Sound Effects (SFX): <strong id="sfxVolVal">80%</strong></label>
+            <input type="range" id="sfxVolSlider" min="0" max="100" value="80" class="settings-slider">
+          </div>
+
+          <div class="settings-row">
+            <label for="ambianceVolSlider">🕯️ Candle Flicker & Hearth Ambience: <strong id="ambianceVolVal">28%</strong></label>
+            <input type="range" id="ambianceVolSlider" min="0" max="100" value="28" class="settings-slider">
+          </div>
+
+          <div class="settings-row-checkbox">
+            <label class="checkbox-label">
+              <input type="checkbox" id="muteAllCheckbox">
+              <span>Mute All Audio</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" id="ambianceToggleCheckbox" checked>
+              <span>Enable Tavern Ambiance</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- SECTION 2: AUTOMATION & GAMEPLAY (AFK MODE) -->
+        <div class="settings-group">
+          <h4 class="settings-group-title" style="color: #4ade80;">🤖 Gameplay & Automation</h4>
+
+          <div class="settings-card-highlight">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+              <div>
+                <strong style="color:#4ade80; font-size:14px;">AFK Idle Failsafe</strong>
+                <p style="font-size:12px; color:#94a3b8; margin:2px 0 0 0;">Automatically rolls and passes turns when you're away so the table isn't stalled. AFK makes simple fallback choices only.</p>
+              </div>
+              <button id="settingsAfkToggleBtn" class="btn btn-sm btn-outline" style="border-color:#4ade80; color:#4ade80; min-width:92px; white-space:nowrap;">AFK: OFF</button>
+            </div>
+          </div>
+
+          <div class="settings-row" style="margin-top:12px;">
+            <label for="afkSpeedSelect">AFK Failsafe Delay:</label>
+            <select id="afkSpeedSelect" class="settings-select">
+              <option value="2500" selected>Standard (2.5s)</option>
+              <option value="4000">Slow (4.0s)</option>
+            </select>
+          </div>
+
+          <div class="settings-row-checkbox" style="margin-top:10px;">
+            <label class="checkbox-label">
+              <input type="checkbox" id="coachTipsCheckbox" checked>
+              <span>Show In-Game Tutorial Coach Tips</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- SECTION 3: GRAPHICS & CAMERA -->
+        <div class="settings-group">
+          <h4 class="settings-group-title" style="color: #facc15;">🎥 Graphics & Environment</h4>
+
+          <div class="settings-row">
+            <label for="cameraModeSelect">Preferred Camera View:</label>
+            <select id="cameraModeSelect" class="settings-select">
+              <option value="auto" selected>Cinematic Auto (Follows Tokens)</option>
+              <option value="overview">Top-Down Overview</option>
+              <option value="saloon">Tavern Table Close-up</option>
+            </select>
+          </div>
+
+          <div class="settings-row">
+            <label for="particlesSelect">Candle Dust Motes & Embers:</label>
+            <select id="particlesSelect" class="settings-select">
+              <option value="full" selected>Full Density (Atmospheric)</option>
+              <option value="reduced">Reduced (High FPS)</option>
+              <option value="off">Disabled</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- SECTION 4: SAVE GAME SESSION -->
+        <div class="settings-group" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px; margin-top: 16px;">
+          <h4 class="settings-group-title" style="color: #6ee7b7;">💾 Match Progress & Backup</h4>
+          <p style="font-size:12px; color:#94a3b8; margin-bottom:12px;">
+            Save and export your match state at any point to resume later.
+          </p>
+          <div style="display:flex; gap:10px;">
+            <button id="settingsSaveGameBtn" class="btn btn-outline" style="flex:1; border-color:#10b981; color:#6ee7b7;">💾 Quick Save Game</button>
+          </div>
+        </div>
+
+        <!-- SECTION 5: DEVELOPER TESTING SUITE -->
+        <div class="settings-group" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px; margin-top: 16px;">
+          <h4 class="settings-group-title" style="color: #fde047;">🛠️ Developer & Sandbox Mode</h4>
+          <p style="font-size:12px; color:#94a3b8; margin-bottom:12px;">
+            Developer testing tools, bot AI controls, tile teleportation, and balance testing suite.
+          </p>
+          <button id="openDevToolsBtn" class="btn btn-outline" style="width:100%; border-color:#eab308; color:#fde047; font-weight:700;">
+            🛠️ Open Developer Testing Suite
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/vendor/three.min.js"></script>
+  <script src="/vendor/OrbitControls.js"></script>
+  <script src="/vendor/GLTFLoader.js"></script>
+  <script src="/vendor/RoundedBoxGeometry.js"></script>
+  <script src="/vendor/confetti.browser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="sounds.js"></script>
+  <script src="tilesData.js"></script>
+  <script src="three-board.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
