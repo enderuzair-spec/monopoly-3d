@@ -555,6 +555,7 @@ function render3DGame(state) {
 
   if (isMyTurn && state.status === "in_progress") {
     if (state.turnPhase === "roll") {
+      clearAutoTurnCountdown();
       rollDiceBtn.removeAttribute("disabled");
       rollDiceBtn.classList.remove("hidden");
       gamePrompt.textContent = "Roll the dice to make your move!";
@@ -566,20 +567,26 @@ function render3DGame(state) {
     } else if (state.turnPhase === "action") {
       const tile = TILES_DEF[currentP.position];
       const prop = state.properties[tile.id];
+      const canBuy = prop && !prop.owner && currentP.money >= tile.cost;
 
-      if (prop && !prop.owner && currentP.money >= tile.cost) {
+      if (canBuy) {
+        clearAutoTurnCountdown();
         buyPropertyBtn.classList.remove("hidden");
         buyPropertyBtn.textContent = `💰 Buy ${tile.name} ($${tile.cost})`;
         auctionBtn.classList.remove("hidden");
         gamePrompt.textContent = `You landed on ${tile.name}! Purchase it or send it to public auction.`;
+        endTurnBtn.classList.remove("hidden");
+        endTurnBtn.textContent = state.lastRollDoubles ? "🎲 Roll Again (Doubles!)" : "✓ End Turn";
       } else {
         gamePrompt.textContent = "Manage your property empire or click End Turn.";
+        endTurnBtn.classList.remove("hidden");
+        startAutoTurnCountdown(state, currentP);
       }
-
-      endTurnBtn.classList.remove("hidden");
-      endTurnBtn.textContent = state.lastRollDoubles ? "🎲 Extra Roll (Doubles!)" : "✓ End Turn";
+    } else {
+      clearAutoTurnCountdown();
     }
   } else {
+    clearAutoTurnCountdown();
     gamePrompt.textContent = `${currentP?.name} is deciding their move...`;
   }
 
@@ -695,7 +702,62 @@ function render3DGame(state) {
   renderLogs(state.logs);
 }
 
+// Auto-End Turn & Modal Helper
+let autoTurnTimer = null;
+let autoTurnCountdown = 4;
+let autoTurnActionKey = null;
+
+function clearAutoTurnCountdown() {
+  if (autoTurnTimer) {
+    clearInterval(autoTurnTimer);
+    autoTurnTimer = null;
+  }
+  autoTurnActionKey = null;
+}
+
+function isAnyModalOpen() {
+  const modalIds = [
+    "tradeModal",
+    "tradeIncomingModal",
+    "propertiesModal",
+    "settingsModal",
+    "cashDrawerModal",
+    "deedModal",
+    "devModal",
+    "rulesModal"
+  ];
+  return modalIds.some(id => {
+    const el = document.getElementById(id);
+    return el && !el.classList.contains("hidden") && el.style.display !== "none";
+  });
+}
+
+function startAutoTurnCountdown(state, currentP) {
+  const actionKey = `${state.turnIndex}_${currentP.position}_${state.lastRollDoubles ? "d" : "n"}`;
+  if (autoTurnActionKey === actionKey) return;
+  clearAutoTurnCountdown();
+  autoTurnActionKey = actionKey;
+  autoTurnCountdown = 4;
+
+  const baseText = state.lastRollDoubles ? "🎲 Roll Again (Doubles!)" : "✓ End Turn";
+  endTurnBtn.textContent = `${baseText} (${autoTurnCountdown}s)`;
+
+  autoTurnTimer = setInterval(() => {
+    // Pause countdown if user is inside a modal
+    if (isAnyModalOpen()) return;
+
+    autoTurnCountdown--;
+    if (autoTurnCountdown > 0) {
+      endTurnBtn.textContent = `${baseText} (${autoTurnCountdown}s)`;
+    } else {
+      clearAutoTurnCountdown();
+      endTurnBtn.click();
+    }
+  }, 1000);
+}
+
 function hideAllActionButtons() {
+  clearAutoTurnCountdown();
   rollDiceBtn.classList.add("hidden");
   buyPropertyBtn.classList.add("hidden");
   auctionBtn.classList.add("hidden");
@@ -750,6 +812,14 @@ useJailCardBtn.addEventListener("click", () => {
 
 endTurnBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
+  clearAutoTurnCountdown();
+  if (gameState?.lastRollDoubles) {
+    // Single-click double roll! Directly triggers dice roll on the board
+    const d1 = Math.floor(Math.random() * 6) + 1;
+    const d2 = Math.floor(Math.random() * 6) + 1;
+    socket.emit("extra_roll_dice", { roomId: currentRoomId, d1, d2, sessionToken, playerId: myPlayer?.id });
+    return;
+  }
   socket.emit("end_turn", { roomId: currentRoomId, sessionToken, playerId: myPlayer?.id });
 });
 
@@ -1506,27 +1576,33 @@ devBuildHotelCurrentBtn?.addEventListener("click", () => {
 if (saveGameBtn) {
   saveGameBtn.addEventListener("click", () => {
     if (!currentRoomId) return alert("No active game room to save!");
-    socket.emit("save_game", { roomId: currentRoomId }, (res) => {
-      if (res && res.error) {
-        alert("Error saving game: " + res.error);
-      } else {
-        if (window.sounds) window.sounds.playSave();
-        // Export local JSON backup
-        if (gameState) {
-          try {
-            const blob = new Blob([JSON.stringify(gameState, null, 2)], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `Monopoly3D_Save_${currentRoomId}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-          } catch (e) {
-            console.error("Local save download err:", e);
-          }
-        }
-        if (gamePrompt) gamePrompt.textContent = `💾 Game saved successfully! (Room: ${currentRoomId}) Snapshot stored on server.`;
+
+    // 1. ALWAYS download a direct local backup file to user's computer
+    if (gameState) {
+      try {
+        const blob = new Blob([JSON.stringify(gameState, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Monopoly3D_Save_${currentRoomId}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        console.error("Local save download err:", e);
       }
+    }
+
+    // 2. Persist to server (passing clientState for instant recovery if server restarted)
+    socket.emit("save_game", { roomId: currentRoomId, clientState: gameState }, (res) => {
+      if (window.sounds) window.sounds.playSave();
+      if (res && res.error) {
+        showEventToast("BACKUP SAVED", `Game snapshot saved and downloaded to your computer! (Server note: ${res.error})`, "💾", "info");
+      } else {
+        showEventToast("GAME SAVED", `Game saved to server & downloaded to your device! (Room: ${currentRoomId})`, "💾", "card");
+      }
+      if (gamePrompt) gamePrompt.textContent = `💾 Match saved! (Room: ${currentRoomId}) Backup downloaded.`;
     });
   });
 }
@@ -2025,12 +2101,16 @@ function checkAfkAction(state) {
   if (!afkMode || !state || state.status !== "in_progress" || !myPlayer) return;
 
   const currentP = state.players ? state.players[state.turnIndex] : null;
-  const isMyTurn = currentP && (myPlayer.id === currentP.id);
+  const isMyTurn = myPlayer && currentP && (
+    myPlayer.id === currentP.id ||
+    (sessionToken && (myPlayer.sessionToken === currentP.sessionToken || currentP.sessionToken === sessionToken))
+  );
 
   // 1. Live Auction: AFK player does not aggressively bid. Always passes so human auction isn't hijacked.
   if (state.turnPhase === "auction" && state.auctionState) {
     const aState = state.auctionState;
-    if (!aState.passedPlayerIds.includes(myPlayer.id)) {
+    const myPassed = aState.passedPlayerIds.includes(myPlayer.id) || (sessionToken && aState.passedPlayerIds.includes(sessionToken));
+    if (!myPassed) {
       scheduleAfkTask(() => {
         passAuctionBtn?.click();
       }, afkDelay);

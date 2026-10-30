@@ -272,6 +272,17 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Game action: Extra Roll Dice (Direct single-click roll on doubles)
+  socket.on("extra_roll_dice", ({ roomId, d1, d2, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (!engine) return;
+    const res = engine.extraRollDice(socket.id, d1, d2, sessionToken || playerId);
+    if (res && res.error) {
+      socket.emit("action_error", { action: "extra_roll_dice", error: res.error });
+    }
+  });
+
   // Game action: Buy Property
   socket.on("buy_property", ({ roomId, sessionToken, playerId }) => {
     const cleanRoomId = (roomId || "").trim().toUpperCase();
@@ -388,9 +399,19 @@ io.on("connection", (socket) => {
     if (engine) engine.respondTrade(socket.id, accept);
   });
 
-  // Save Game to persistent file
-  socket.on("save_game", ({ roomId }, callback) => {
-    const engine = rooms.get(roomId);
+  // Save Game to persistent file (with clientState backup restore)
+  socket.on("save_game", ({ roomId, clientState }, callback) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    let engine = rooms.get(cleanRoomId);
+    if (!engine && clientState && clientState.players) {
+      try {
+        engine = new MonopolyEngine(cleanRoomId, (state) => io.to(cleanRoomId).emit("game_state", state));
+        engine.loadState(clientState);
+        rooms.set(cleanRoomId, engine);
+      } catch (err) {
+        console.error("Failed to restore engine from clientState:", err);
+      }
+    }
     if (!engine) {
       if (callback) callback({ error: "Game room not found" });
       return;
@@ -398,11 +419,11 @@ io.on("connection", (socket) => {
     const savedDir = path.join(__dirname, "saved_games");
     if (!fs.existsSync(savedDir)) fs.mkdirSync(savedDir, { recursive: true });
     const saveState = engine.exportState();
-    const saveFile = path.join(savedDir, `${roomId}.json`);
+    const saveFile = path.join(savedDir, `${cleanRoomId}.json`);
     fs.writeFileSync(saveFile, JSON.stringify(saveState, null, 2), "utf8");
-    engine.log(`💾 Game saved to file (${roomId}.json)!`);
-    io.to(roomId).emit("game_state", engine.getPublicState());
-    if (callback) callback({ success: true, roomId, timestamp: saveState.saveTimestamp });
+    engine.log(`💾 Game saved to file (${cleanRoomId}.json)!`);
+    io.to(cleanRoomId).emit("game_state", engine.getPublicState());
+    if (callback) callback({ success: true, roomId: cleanRoomId, timestamp: saveState.saveTimestamp });
   });
 
   // List available saved games

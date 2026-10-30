@@ -2,9 +2,14 @@ const { BOARD, GROUP_MEMBERS } = require("./boardData");
 const { CHANCE_CARDS, COMMUNITY_CHEST_CARDS, shuffle } = require("./cards");
 
 class MonopolyEngine {
-  constructor(roomId, onStateChange) {
-    this.roomId = roomId;
-    this.onStateChange = onStateChange || (() => {});
+  constructor(roomIdOrConfig, onStateChange) {
+    if (typeof roomIdOrConfig === "object" && roomIdOrConfig !== null) {
+      this.roomId = roomIdOrConfig.roomId;
+      this.onStateChange = roomIdOrConfig.onStateChange || (() => {});
+    } else {
+      this.roomId = roomIdOrConfig;
+      this.onStateChange = onStateChange || (() => {});
+    }
     this.status = "waiting"; // 'waiting', 'in_progress', 'ended'
     this.players = [];
     this.turnIndex = 0;
@@ -1072,6 +1077,18 @@ class MonopolyEngine {
     this.activeTrade = null;
     this.emitChange();
     return { success: true };
+  }
+
+  extraRollDice(playerId, forceD1 = null, forceD2 = null, sessionToken = null) {
+    const player = this.getCurrentPlayer();
+    if (!player || !this.isPlayerTurn(player, playerId, sessionToken)) return { error: "Not your turn" };
+    if (!this.lastRollDoubles || player.inJail || this.consecutiveDoubles >= 3) {
+      return this.endTurn(playerId, sessionToken);
+    }
+    this.lastRollDoubles = false;
+    this.turnPhase = "roll";
+    this.log(`🎲 ${player.name} takes their extra roll!`);
+    return this.rollDice(playerId, forceD1, forceD2, sessionToken);
   }
 
   endTurn(playerId, sessionToken = null) {
