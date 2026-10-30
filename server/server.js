@@ -454,11 +454,13 @@ io.on("connection", (socket) => {
   socket.on("send_chat", ({ roomId, message }) => {
     const engine = rooms.get(roomId);
     if (!engine) return;
+    const cleanMsg = (typeof message === "string" ? message.slice(0, 300) : "").trim();
+    if (!cleanMsg) return;
     const player = engine.players.find(p => p.id === socket.id);
     const sender = player ? player.name : "Spectator";
     io.to(roomId).emit("chat_message", {
       sender,
-      message,
+      message: cleanMsg,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     });
   });

@@ -740,10 +740,19 @@ chatForm.addEventListener("submit", (e) => {
   }
 });
 
+function escapeHTML(str) {
+  const div = document.createElement("div");
+  div.textContent = str || "";
+  return div.innerHTML;
+}
+
 socket.on("chat_message", ({ sender, message, time }) => {
   const row = document.createElement("div");
   row.className = "log-item";
-  row.innerHTML = `<span class="time">${time}</span> <strong>${sender}:</strong> ${message}`;
+  const safeTime = escapeHTML(time);
+  const safeSender = escapeHTML(sender);
+  const safeMsg = escapeHTML(message);
+  row.innerHTML = `<span class="time">${safeTime}</span> <strong>${safeSender}:</strong> ${safeMsg}`;
   chatMessagesList.appendChild(row);
   chatMessagesList.scrollTop = chatMessagesList.scrollHeight;
 });
