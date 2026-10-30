@@ -261,70 +261,97 @@ io.on("connection", (socket) => {
     if (callback) callback(res);
   });
 
-  // Game action: Roll Dice (supports physical roll numbers from 3D physics)
-  socket.on("roll_dice", ({ roomId, d1, d2 }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.rollDice(socket.id, d1, d2);
+  // Game action: Roll Dice (supports physical roll numbers from 3D physics and session tokens)
+  socket.on("roll_dice", ({ roomId, d1, d2, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (!engine) return;
+    const res = engine.rollDice(socket.id, d1, d2, sessionToken || playerId);
+    if (res && res.error) {
+      socket.emit("action_error", { action: "roll_dice", error: res.error });
+    }
   });
 
   // Game action: Buy Property
-  socket.on("buy_property", ({ roomId }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.buyProperty(socket.id);
+  socket.on("buy_property", ({ roomId, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (!engine) return;
+    const res = engine.buyProperty(socket.id, sessionToken || playerId);
+    if (res && res.error) {
+      socket.emit("action_error", { action: "buy_property", error: res.error });
+    }
   });
 
   // Game action: Start Auction for current property
   socket.on("start_auction", ({ roomId, propertyId }) => {
-    const engine = rooms.get(roomId);
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
     if (engine) engine.startAuction(propertyId);
   });
 
   // Game action: Place Bid in auction
-  socket.on("place_bid", ({ roomId, amount }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.placeBid(socket.id, amount);
+  socket.on("place_bid", ({ roomId, amount, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (engine) engine.placeBid(socket.id, amount, sessionToken || playerId);
   });
 
   // Game action: Pass in auction
-  socket.on("pass_bid", ({ roomId }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.passBid(socket.id);
+  socket.on("pass_bid", ({ roomId, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (engine) engine.passBid(socket.id, sessionToken || playerId);
   });
 
   // Game action: Build house
   socket.on("build_house", ({ roomId, propertyId }) => {
-    const engine = rooms.get(roomId);
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
     if (engine) engine.buildHouse(socket.id, propertyId);
   });
 
   // Game action: Sell house
   socket.on("sell_house", ({ roomId, propertyId }) => {
-    const engine = rooms.get(roomId);
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
     if (engine) engine.sellHouse(socket.id, propertyId);
   });
 
   // Game action: Mortgage
   socket.on("mortgage_property", ({ roomId, propertyId }) => {
-    const engine = rooms.get(roomId);
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
     if (engine) engine.mortgageProperty(socket.id, propertyId);
   });
 
   // Game action: Unmortgage
   socket.on("unmortgage_property", ({ roomId, propertyId }) => {
-    const engine = rooms.get(roomId);
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
     if (engine) engine.unmortgageProperty(socket.id, propertyId);
   });
 
   // Game action: Pay jail fine
-  socket.on("pay_jail_fine", ({ roomId }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.payJailFine(socket.id);
+  socket.on("pay_jail_fine", ({ roomId, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (!engine) return;
+    const res = engine.payJailFine(socket.id, sessionToken || playerId);
+    if (res && res.error) {
+      socket.emit("action_error", { action: "pay_jail_fine", error: res.error });
+    }
   });
 
   // Game action: Use jail card
-  socket.on("use_jail_card", ({ roomId }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.useJailCard(socket.id);
+  socket.on("use_jail_card", ({ roomId, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (!engine) return;
+    const res = engine.useJailCard(socket.id, sessionToken || playerId);
+    if (res && res.error) {
+      socket.emit("action_error", { action: "use_jail_card", error: res.error });
+    }
   });
 
   // Game action: Pay debt
@@ -448,9 +475,14 @@ io.on("connection", (socket) => {
   });
 
   // Game action: End Turn
-  socket.on("end_turn", ({ roomId }) => {
-    const engine = rooms.get(roomId);
-    if (engine) engine.endTurn(socket.id);
+  socket.on("end_turn", ({ roomId, sessionToken, playerId }) => {
+    const cleanRoomId = (roomId || "").trim().toUpperCase();
+    const engine = rooms.get(cleanRoomId);
+    if (!engine) return;
+    const res = engine.endTurn(socket.id, sessionToken || playerId);
+    if (res && res.error) {
+      socket.emit("action_error", { action: "end_turn", error: res.error });
+    }
   });
 
   // Developer Mode Action Handler (Passcode: 125)

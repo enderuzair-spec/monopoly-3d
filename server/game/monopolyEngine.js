@@ -355,6 +355,29 @@ class MonopolyEngine {
     return this.players[this.turnIndex];
   }
 
+  resolvePlayer(identifier, sessionToken = null) {
+    if (!identifier && !sessionToken) return null;
+    return this.players.find(p =>
+      (identifier && p.id === identifier) ||
+      (sessionToken && p.sessionToken === sessionToken) ||
+      (identifier && p.sessionToken === identifier)
+    );
+  }
+
+  isPlayerTurn(player, identifier, sessionToken = null) {
+    if (!player) return false;
+    const match = (player.id === identifier) ||
+                  (sessionToken && player.sessionToken === sessionToken) ||
+                  (identifier && player.sessionToken === identifier);
+    if (match && identifier && player.id !== identifier) {
+      // Re-bind to active socket ID seamlessly if it was a transient drop
+      player.id = identifier;
+      player.connected = true;
+      player.disconnectExpires = null;
+    }
+    return match;
+  }
+
   getNextActivePlayerIndex(startIdx) {
     let next = (startIdx + 1) % this.players.length;
     let count = 0;
@@ -366,9 +389,9 @@ class MonopolyEngine {
   }
 
   // Rolling the dice
-  rollDice(playerId, forceD1 = null, forceD2 = null) {
+  rollDice(playerId, forceD1 = null, forceD2 = null, sessionToken = null) {
     const player = this.getCurrentPlayer();
-    if (!player || player.id !== playerId) return { error: "Not your turn" };
+    if (!player || !this.isPlayerTurn(player, playerId, sessionToken)) return { error: "Not your turn" };
     if (this.turnPhase !== "roll") return { error: "Cannot roll right now" };
 
     // Immediately lock phase to prevent multiple roll events
@@ -569,9 +592,9 @@ class MonopolyEngine {
     this.log(`${player.name} is now locked in Jail.`);
   }
 
-  payJailFine(playerId) {
+  payJailFine(playerId, sessionToken = null) {
     const player = this.getCurrentPlayer();
-    if (!player || player.id !== playerId || !player.inJail) return { error: "Cannot pay fine" };
+    if (!player || !this.isPlayerTurn(player, playerId, sessionToken) || !player.inJail) return { error: "Cannot pay fine" };
     if (player.money < 50) return { error: "Not enough money to pay $50 jail fine" };
 
     this.deductCash(player, 50);
@@ -582,9 +605,9 @@ class MonopolyEngine {
     return { success: true };
   }
 
-  useJailCard(playerId) {
+  useJailCard(playerId, sessionToken = null) {
     const player = this.getCurrentPlayer();
-    if (!player || player.id !== playerId || !player.inJail) return { error: "Cannot use card" };
+    if (!player || !this.isPlayerTurn(player, playerId, sessionToken) || !player.inJail) return { error: "Cannot use card" };
     if (!player.jailCards || player.jailCards < 1) return { error: "No Get Out of Jail Free cards" };
 
     player.jailCards--;
@@ -595,9 +618,9 @@ class MonopolyEngine {
     return { success: true };
   }
 
-  buyProperty(playerId) {
+  buyProperty(playerId, sessionToken = null) {
     const player = this.getCurrentPlayer();
-    if (!player || player.id !== playerId) return { error: "Not your turn" };
+    if (!player || !this.isPlayerTurn(player, playerId, sessionToken)) return { error: "Not your turn" };
     const tile = BOARD[player.position];
     if (!tile || (tile.type !== "property" && tile.type !== "railroad" && tile.type !== "utility")) {
       return { error: "Tile cannot be purchased" };
@@ -1051,9 +1074,9 @@ class MonopolyEngine {
     return { success: true };
   }
 
-  endTurn(playerId) {
+  endTurn(playerId, sessionToken = null) {
     const player = this.getCurrentPlayer();
-    if (!player || player.id !== playerId) return { error: "Not your turn" };
+    if (!player || !this.isPlayerTurn(player, playerId, sessionToken)) return { error: "Not your turn" };
     if (this.turnPhase === "roll") return { error: "Must roll dice before ending turn" };
     if (this.turnPhase === "debt") return { error: "Must resolve debt or declare bankruptcy before ending turn" };
     if (this.turnPhase === "auction") return { error: "Auction in progress" };

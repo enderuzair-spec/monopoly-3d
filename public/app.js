@@ -378,12 +378,13 @@ socket.on("game_state", (state) => {
   }
 
   gameState = state;
-  if (myPlayer && state.players) {
-    const updated = state.players.find(p => p.id === myPlayer.id);
+  if (state.players) {
+    const updated = state.players.find(p => 
+      (myPlayer && p.id === myPlayer.id) ||
+      (sessionToken && p.sessionToken === sessionToken) ||
+      (p.id === socket.id)
+    );
     if (updated) myPlayer = updated;
-  } else if (!myPlayer && state.players) {
-    const found = state.players.find(p => p.id === socket.id || (sessionToken && p.sessionToken === sessionToken));
-    if (found) myPlayer = found;
   }
   if (propertiesModal && !propertiesModal.classList.contains("hidden")) {
     renderPropertyPortfolio();
@@ -492,7 +493,10 @@ function renderLobbyWaiting(state) {
 function render3DGame(state) {
   gameRoomCode.textContent = state.roomId;
   const currentP = state.players[state.turnIndex];
-  const isMyTurn = myPlayer && currentP && (myPlayer.id === currentP.id);
+  const isMyTurn = myPlayer && currentP && (
+    myPlayer.id === currentP.id ||
+    (sessionToken && (myPlayer.sessionToken === currentP.sessionToken || currentP.sessionToken === sessionToken))
+  );
 
   // Sync 3D Scene Entities with strict dice-settled sequencing
   if (scene3D) {
@@ -551,6 +555,7 @@ function render3DGame(state) {
 
   if (isMyTurn && state.status === "in_progress") {
     if (state.turnPhase === "roll") {
+      rollDiceBtn.removeAttribute("disabled");
       rollDiceBtn.classList.remove("hidden");
       gamePrompt.textContent = "Roll the dice to make your move!";
       if (currentP.inJail) {
@@ -702,16 +707,25 @@ function hideAllActionButtons() {
 // Action Button Event Listeners
 rollDiceBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
-  rollDiceBtn.classList.add("hidden");
+  rollDiceBtn.setAttribute("disabled", "true");
   // 3D Physical Dice roll numbers: what physically rolls IS what is played!
   const d1 = Math.floor(Math.random() * 6) + 1;
   const d2 = Math.floor(Math.random() * 6) + 1;
-  socket.emit("roll_dice", { roomId: currentRoomId, d1, d2 });
+  socket.emit("roll_dice", { roomId: currentRoomId, d1, d2, sessionToken, playerId: myPlayer?.id });
+
+  // Failsafe timer: if server doesn't advance within 2.5s, re-enable roll button
+  clearTimeout(window._rollFailsafeTimer);
+  window._rollFailsafeTimer = setTimeout(() => {
+    if (gameState && gameState.turnPhase === "roll") {
+      rollDiceBtn.removeAttribute("disabled");
+      rollDiceBtn.classList.remove("hidden");
+    }
+  }, 2500);
 });
 
 buyPropertyBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
-  socket.emit("buy_property", { roomId: currentRoomId });
+  socket.emit("buy_property", { roomId: currentRoomId, sessionToken, playerId: myPlayer?.id });
   window.sounds.playCash();
   if (scene3D) scene3D.spawnGoldCoinFountain();
 });
@@ -720,21 +734,32 @@ auctionBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
   if (gameState) {
     const currentP = gameState.players[gameState.turnIndex];
-    socket.emit("start_auction", { roomId: currentRoomId, propertyId: currentP.position });
+    socket.emit("start_auction", { roomId: currentRoomId, propertyId: currentP.position, sessionToken, playerId: myPlayer?.id });
   }
 });
 
 payJailBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
-  socket.emit("pay_jail_fine", { roomId: currentRoomId });
+  socket.emit("pay_jail_fine", { roomId: currentRoomId, sessionToken, playerId: myPlayer?.id });
 });
+
 useJailCardBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
-  socket.emit("use_jail_card", { roomId: currentRoomId });
+  socket.emit("use_jail_card", { roomId: currentRoomId, sessionToken, playerId: myPlayer?.id });
 });
+
 endTurnBtn.addEventListener("click", () => {
   deedModal.classList.add("hidden");
-  socket.emit("end_turn", { roomId: currentRoomId });
+  socket.emit("end_turn", { roomId: currentRoomId, sessionToken, playerId: myPlayer?.id });
+});
+
+socket.on("action_error", (data) => {
+  console.warn("Server action error:", data);
+  if (data?.action === "roll_dice") {
+    rollDiceBtn.removeAttribute("disabled");
+    rollDiceBtn.classList.remove("hidden");
+  }
+  showEventToast("ACTION NOTICE", data.error || "Action could not be completed.", "⚠️", "info");
 });
 dismissCardBtn.addEventListener("click", () => cardDisplay.classList.add("hidden"));
 
@@ -763,26 +788,26 @@ cardModalBackdrop?.addEventListener("click", (e) => {
 // Auction
 bid10Btn.addEventListener("click", () => {
   if (gameState?.auctionState) {
-    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 10 });
+    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 10, sessionToken, playerId: myPlayer?.id });
     window.sounds?.playCash();
   }
 });
 
 bid50Btn.addEventListener("click", () => {
   if (gameState?.auctionState) {
-    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 50 });
+    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 50, sessionToken, playerId: myPlayer?.id });
     window.sounds?.playCash();
   }
 });
 
 bid100Btn?.addEventListener("click", () => {
   if (gameState?.auctionState) {
-    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 100 });
+    socket.emit("place_bid", { roomId: currentRoomId, amount: gameState.auctionState.currentBid + 100, sessionToken, playerId: myPlayer?.id });
     window.sounds?.playCash();
   }
 });
 
-passAuctionBtn.addEventListener("click", () => socket.emit("pass_bid", { roomId: currentRoomId }));
+passAuctionBtn.addEventListener("click", () => socket.emit("pass_bid", { roomId: currentRoomId, sessionToken, playerId: myPlayer?.id }));
 
 // Collapsible Sidebar Controls
 closeSidebarBtn?.addEventListener("click", () => {

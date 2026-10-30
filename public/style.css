@@ -546,12 +546,12 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus {
 
 /* ================= BOTTOM CENTER ACTION CONTROLS ================= */
 .hud-bottom-center {
-  position: absolute;
-  bottom: 14px;
+  position: fixed;
+  bottom: 16px;
   left: 44%;
   transform: translateX(-50%);
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse; /* Action Buttons anchored at bottom; Prompt & Tips sit above */
   align-items: center;
   gap: 8px;
   z-index: 150;
@@ -580,6 +580,21 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus {
   gap: 12px;
   width: 100%;
   justify-content: center;
+}
+
+@media (max-height: 720px) {
+  .hud-bottom-center {
+    bottom: 8px;
+    gap: 4px;
+  }
+  .btn-lg {
+    padding: 10px 18px;
+    font-size: 14px;
+  }
+  .game-prompt {
+    padding: 6px 16px;
+    font-size: 12px;
+  }
 }
 
 .btn-pulse {
